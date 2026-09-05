@@ -6,11 +6,17 @@
 
 ## 仓库结构
 ```
-apps/frontend/   # 前端工程（Vite + React + TS）：官网 + 客户端工作台
-docs/            # 产品/规格/计划/日志文档
-prototype/       # 早期静态原型（历史）
-ARCHITECTURE.md  # 架构文档
+apps/
+  frontend/        # Web 前端（Vite+React+TS）：官网 + 工作台
+  desktop/         # 桌面版前端（同事进行中，Tauri/本地应用）
+  backend/         # 后端 API / Agent 编排（规划中）
+docs/              # 内部文档（本地，不提交到仓库）
+prototype/         # 早期静态原型（历史）
+ARCHITECTURE.md    # 架构文档
+CONTRIBUTING.md    # 贡献指南 / 提交规范
 ```
+
+> 说明：当前已实现 `apps/frontend`。`desktop/` 由同事负责（桌面应用），`backend/` 待接入 LLM 与编排后落地。
 
 ## 快速开始（前端）
 ```bash
@@ -22,18 +28,16 @@ npm run build      # 生产构建 dist/
 
 ## 当前进度（摘要）
 - ✅ 前端：官网落地页 + 客户端 9 个页面，路由全部打通（mock 数据）
-- 📍 下一步：接真实后端 + LLM（坑位 A 任务闭环）
-- 📌 更详细：见 [docs/开发日志_CHANGELOG.md] 与 [docs/模块坑位清单_ROADMAP.md]
+- 📍 下一步：接真实后端 + LLM
+- 🤝 参与开发：见 [CONTRIBUTING.md]
 
-## 文档索引
+## 文档索引（仓库内）
 | 文档 | 说明 |
 |---|---|
 | `ARCHITECTURE.md` | 架构总览 |
-| `docs/设计令牌_TOKEN.md` | 配色/样式规范 |
-| `docs/功能模块规格书_MODULES.md` | 模块工单 |
-| `docs/建造计划_PLAN.md` | 积木式建造计划 |
-| `docs/模块坑位清单_ROADMAP.md` | 一个萝卜一个坑 |
-| `docs/开发日志_CHANGELOG.md` | 逐轮开发记录 |
+| `CONTRIBUTING.md` | 贡献指南、提交规范、运行方式 |
+
+> 产品分析 / 规格书 / 开发日志等内部文档保存在本地 `docs/`，随讨论更新，不随仓库分发。
 
 ## 许可
 见 [LICENSE]。
