@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KylinWork · 原型</title>
+<style>
+  /* ===== Design Tokens（暖灰 + 靛蓝 · 锁定） ===== */
+  :root{
+    --bg:#FAFAFB; --surface:#FFFFFF; --surface-2:#F5F5F6; --line:#ECECEE;
+    --text-1:#18181B; --text-2:#52525B; --text-3:#A1A1AA;
+    --brand:#4F46E5; --brand-soft:#EEF0FE; --brand-line:#C7C9F3;
+    --ok:#16A34A; --warn:#D97706; --danger:#DC2626;
+    --shadow:0 1px 2px rgba(24,24,27,.04),0 4px 16px rgba(24,24,27,.06);
+    --r-lg:14px; --r-md:10px; --r-sm:8px;
+    --sb:240px;
+    --fs-2xl:22px; --fs-xl:18px; --fs-lg:15px; --fs-md:14px; --fs-sm:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--text-1);font-size:var(--fs-md);line-height:1.55;
+    -webkit-font-smoothing:antialiased}
+  button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input{font:inherit;border:none;outline:none;background:transparent;color:var(--text-1)}
+
+  /* ===== Layout ===== */
+  .app{display:flex;height:100vh;overflow:hidden}
+  .icon{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .icon.sm{width:16px;height:16px}
+
+  /* ===== Sidebar ===== */
+  .sb{width:var(--sb);flex:none;background:var(--surface);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;padding:16px 12px;gap:4px}
+  .sb-logo{display:flex;align-items:center;gap:10px;padding:6px 10px 18px}
+  .sb-logo .mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#4F46E5,#7C6CF5);
+    display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;box-shadow:var(--shadow)}
+  .sb-logo b{font-size:var(--fs-lg);letter-spacing:-.2px}
+  .sb-new{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:var(--r-sm);
+    background:var(--brand);color:#fff;font-weight:600;font-size:var(--fs-md);margin-bottom:8px;
+    transition:.15s}
+  .sb-new:hover{background:#4338CA}
+  .sb-sec{font-size:11px;color:var(--text-3);padding:8px 10px 4px;font-weight:500}
+  .sb-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-sm);
+    color:var(--text-2);font-size:var(--fs-md);transition:.12s;position:relative}
+  .sb-item:hover{background:var(--surface-2);color:var(--text-1)}
+  .sb-item.on{background:var(--brand-soft);color:var(--brand);font-weight:600}
+  .sb-item.on::before{content:"";position:absolute;left:-12px;top:7px;bottom:7px;width:3px;
+    border-radius:3px;background:var(--brand)}
+  .sb-spacer{flex:1}
+  .sb-user{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-sm)}
+  .sb-user:hover{background:var(--surface-2)}
+  .sb-user .ava{width:30px;height:30px;border-radius:50%;background:var(--brand-soft);color:var(--brand);
+    display:grid;place-items:center;font-weight:600;font-size:13px}
+  .sb-user .nm{font-size:13px;font-weight:600;line-height:1.2}
+  .sb-user .em{font-size:11px;color:var(--text-3)}
+
+  /* ===== Main ===== */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .top{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;
+    padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line)}
+  .top h1{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.2px}
+  .top-right{display:flex;align-items:center;gap:10px}
+  .page{flex:1;overflow:auto;padding:28px 32px}
+
+  /* ===== Buttons ===== */
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:var(--r-sm);
+    font-size:var(--fs-md);font-weight:500;transition:.14s;border:1px solid transparent}
+  .btn.primary{background:var(--brand);color:#fff}
+  .btn.primary:hover{background:#4338CA}
+  .btn.ghost{background:var(--surface);border-color:var(--line);color:var(--text-1)}
+  .btn.ghost:hover{background:var(--surface-2)}
+  .btn.soft{background:var(--brand-soft);color:var(--brand)}
+  .btn.soft:hover{background:#E2E5FD}
+
+  /* ===== Home ===== */
+  .home{max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;
+    padding-top:6vh}
+  .home .mark-lg{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#4F46E5,#7C6CF5);
+    display:grid;place-items:center;color:#fff;font-weight:700;font-size:28px;box-shadow:var(--shadow);margin-bottom:18px}
+  .home h2{font-size:26px;font-weight:650;letter-spacing:-.4px}
+  .home .sub{color:var(--text-2);margin:10px 0 34px;text-align:center;max-width:520px;font-size:15px}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:16px;transition:.15s;text-align:left;box-shadow:var(--shadow)}
+  .card:hover{border-color:var(--brand-line);transform:translateY(-1px)}
+  .card .c-top{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .card .c-ic{width:26px;height:26px;border-radius:7px;background:var(--brand-soft);color:var(--brand);
+    display:grid;place-items:center}
+  .card b{font-size:var(--fs-md)}
+  .card p{font-size:13px;color:var(--text-2)}
+  .home .hint{color:var(--text-3);font-size:12.5px;margin-top:20px}
+
+  /* ===== Input ===== */
+  .composer{width:100%;margin-top:26px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-lg);box-shadow:var(--shadow);padding:14px 16px;transition:.15s;
+    font-size:15px}
+  .composer:focus-within{border-color:var(--brand-line)}
+  .composer .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+    font-size:12.5px;color:var(--text-2);background:var(--surface-2)}
+  .pill.blue{background:var(--brand-soft);color:var(--brand)}
+  .pill .ic{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .send{margin-left:auto;width:32px;height:32px;border-radius:50%;background:var(--brand);color:#fff;
+    display:grid;place-items:center}
+  .send:hover{background:#4338CA}
+
+  /* ===== Task page ===== */
+  .taskwrap{display:grid;grid-template-columns:1fr 300px;gap:20px;max-width:1080px;margin:0 auto}
+  .tcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    box-shadow:var(--shadow);padding:18px 20px}
+  .tcard + .tcard{margin-top:16px}
+  .tcard .t-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .tcard .t-h b{font-size:var(--fs-lg);letter-spacing:-.2px}
+  .badge{font-size:12px;padding:3px 10px;border-radius:999px;font-weight:500}
+  .badge.run{background:var(--brand-soft);color:var(--brand)}
+  .badge.done{background:#E7F5EC;color:var(--ok)}
+  .badge.warn{background:#FBF0E1;color:var(--warn)}
+  .steps{list-style:none;display:flex;flex-direction:column;gap:4px}
+  .step{display:flex;align-items:center;gap:12px;padding:7px 10px;border-radius:var(--r-sm)}
+  .step.cur{background:var(--brand-soft)}
+  .dot{width:20px;height:20px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700}
+  .dot.done{background:var(--ok);color:#fff}
+  .dot.run{background:var(--brand);color:#fff}
+  .dot.wait{border:1.5px solid var(--line);color:var(--text-3)}
+  .step .txt{font-size:14px}
+  .step .sub{font-size:12px;color:var(--text-3);margin-left:auto;flex:none}
+  .file{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);
+    border-radius:var(--r-md);margin-top:8px}
+  .file .ft{width:36px;height:36px;border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;flex:none}
+  .ft.tx{background:#E8853C}.ft.sx{background:#16A34A}.ft.doc{background:var(--brand)}.ft.png{background:#64748B}
+  .file .fn{font-size:13.5px;font-weight:600}
+  .file .fm{font-size:12px;color:var(--text-3)}
+  .file .btn{margin-left:auto}
+
+  /* ===== Right rail ===== */
+  .rail{display:flex;flex-direction:column;gap:16px}
+  .rbox{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 18px}
+  .rbox h3{font-size:13px;font-weight:600;margin-bottom:4px}
+  .rbox .rsub{font-size:11.5px;color:var(--text-3);margin-bottom:12px}
+  .ck{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-2);padding:4px 0}
+  .ck .bx{width:17px;height:17px;border-radius:5px;border:1.5px solid var(--line);display:grid;place-items:center;flex:none}
+  .ck.on .bx{background:var(--brand);border-color:var(--brand)}
+  .ck.on .bx svg{width:11px;height:11px;stroke:#fff;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .ck.on{color:var(--text-1)}
+  .cfg{font-size:12.5px;color:var(--text-2);display:flex;justify-content:space-between;padding:4px 0}
+  .cfg span{color:var(--text-3)}
+  .tl{list-style:none;margin-top:6px}
+  .tl li{display:flex;gap:10px;font-size:12.5px;color:var(--text-2);padding:3px 0;position:relative}
+  .tl li .tdot{width:7px;height:7px;border-radius:50%;background:var(--brand);margin-top:5px;flex:none}
+  .tl li .tm{color:var(--text-3);width:44px;flex:none}
+
+  .empty{display:grid;place-items:center;height:100%;color:var(--text-3);font-size:14px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text-1);color:#fff;
+    padding:10px 18px;border-radius:10px;font-size:13px;box-shadow:var(--shadow);opacity:0;pointer-events:none;
+    transition:.25s}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sb">
+    <div class="sb-logo"><div class="mark">K</div><b>KylinWork</b></div>
+    <button class="sb-new"><svg class="icon"><path d="M12 5v14M5 12h14"/></svg> 新任务</button>
+    <div class="sb-sec">工作区</div>
+    <button class="sb-item on" data-page="base"><svg class="icon"><path d="M4 6h16M4 12h9M4 18h6"/></svg>新会话</button>
+    <button class="sb-item"><svg class="icon"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-8a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg data-ph="助理">助理</button>
+    <button class="sb-item"><svg class="icon"><circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg data-ph="专家广场">专家广场</button>
+    <button class="sb-item"><svg class="icon"><path d="M12 3l2.5 5.2L20 9l-4 3.9 1 5.6-5-2.6-5 2.6 1-5.6L4 9l5.5-.8z"/></svg data-ph="技能 · 连接器">技能 · 连接器</button>
+    <button class="sb-item"><svg class="icon"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg data-ph="自动化">自动化</button>
+    <div class="sb-spacer"></div>
+    <div class="sb-user"><div class="ava">管</div><div><div class="nm">超级管理员</div><div class="em">本地工作区</div></div></div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="top">
+      <h1 id="topTitle">新会话</h1>
+      <div class="top-right">
+        <button class="btn ghost" id="miniBtn" style="display:none">
+          <svg class="icon"><path d="M4 7h16M4 12h16M4 17h10"/></svg>成果文件</button>
+      </div>
+    </div>
+
+    <!-- Page: Home -->
+    <div class="page" id="page-home">
+      <div class="home">
+        <div class="mark-lg">K</div>
+        <h2>今天帮你做些什么？</h2>
+        <p class="sub">说出需求，专家团队自主规划，在本地工作空间交付可验收的成果</p>
+        <div class="cards">
+          <button class="card" data-p="帮我分析这份数据，做可视化图表并说明结论">
+            <div class="c-top"><span class="c-ic"><svg class="icon"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>数据分析</b></div>
+            <p>帮我分析这份数据，做可视化图表并说明结论</p>
+          </button>
+          <button class="card" data-p="写一份本周工作周报，重点突出进展和风险">
+            <div class="c-top"><span class="c-ic"><svg class="icon"><path d="M4 5h16M4 9h16M4 13h10M4 17h7"/></svg></span><b>文档写作</b></div>
+            <p>写一份本周工作周报，重点突出进展和风险</p>
+          </button>
+          <button class="card" data-p="做一份产品介绍 PPT，含市场分析和数据图表">
+            <div class="c-top"><span class="c-ic"><svg class="icon"><path d="M4 4h16v13H4zM4 21h16M9 8h6M9 12h6"/></svg></span><b>演示文稿</b></div>
+            <p>做一份产品介绍 PPT，含市场分析和数据图表</p>
+          </button>
+          <button class="card" data-p="调研一下主要竞品的最新动态，输出对比报告">
+            <div class="c-top"><span class="c-ic"><svg class="icon"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4M8 11h6M11 8v6"/></svg></span><b>深度调研</b></div>
+            <p>调研一下主要竞品的最新动态，输出对比报告</p>
+          </button>
+        </div>
+        <div class="composer" id="composer">
+          <input id="inp" style="width:100%" placeholder="今天帮你做些什么？  @引用文件  ·  /调用技能">
+          <div class="row">
+            <span class="pill">+</span>
+            <span class="pill blue"><svg class="ic"><path d="M12 3v10M7 8l5 5 5-5"/></svg> DeepSeek ▾</span>
+            <span class="pill">连接器 ▾</span>
+            <span class="pill">专家 ▾</span>
+            <span class="pill">技能 ▾</span>
+            <button class="send" id="sendHome"><svg class="icon"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+          </div>
+        </div>
+        <p class="hint">@ 引用工作区文件 · / 调用技能 · 微信扫码即可远程指挥</p>
+      </div>
+    </div>
+
+    <!-- Page: Task -->
+    <div class="page" id="page-task" style="display:none">
+      <div class="taskwrap">
+        <div>
+          <div class="tcard">
+            <div class="t-h">
+              <b id="taskTitle">竞品分析报告</b>
+              <span class="badge run" id="taskBadge">执行中</span>
+            </div>
+            <ul class="steps" id="steps"></ul>
+          </div>
+          <div class="tcard">
+            <div class="t-h"><b>中间产物</b></div>
+            <div class="file"><div class="ft sx">XLS</div>
+              <div><div class="fn">销售汇总.xlsx</div><div class="fm">已另存到工作空间 · 6 Sheet</div></div>
+              <button class="btn ghost">打开</button></div>
+          </div>
+          <div class="tcard">
+            <div class="t-h"><b>交付成果</b></div>
+            <div class="file"><div class="ft tx">PPT</div>
+              <div><div class="fn">Q3复盘.pptx</div><div class="fm">12 页 · 图表 6 处 · 可编辑</div></div>
+              <button class="btn primary">下载</button></div>
+          </div>
+        </div>
+        <div class="rail">
+          <div class="rbox">
+            <h3>目标验收清单</h3><div class="rsub">每轮执行后自动核对</div>
+            <div class="ck on"><span class="bx"><svg><path d="M5 12l4 4 10-10"/></svg></span>覆盖 5 家主要竞品</div>
+            <div class="ck on"><span class="bx"><svg><path d="M5 12l4 4 10-10"/></svg></span>包含数据对比图表</div>
+            <div class="ck"><span class="bx"></span>PPT 排版终审</div>
+          </div>
+          <div class="rbox">
+            <h3>本次执行配置</h3><div class="rsub">仅对本次任务生效</div>
+            <div class="cfg">模型 <span>DeepSeek</span></div>
+            <div class="cfg">专家 <span>数据分析师</span></div>
+            <div class="cfg">技能 <span>PPT 设计</span></div>
+            <div class="cfg">工作空间 <span>默认</span></div>
+          </div>
+          <div class="rbox">
+            <h3>执行时间线</h3>
+            <ul class="tl">
+              <li><span class="tdot"></span><span class="tm">09:00</span>创建任务</li>
+              <li><span class="tdot"></span><span class="tm">09:01</span>读取 Excel</li>
+              <li><span class="tdot"></span><span class="tm">09:03</span>生成图表</li>
+              <li><span class="tdot"></span><span class="tm">09:08</span>排版 PPT</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  const $=s=>document.querySelector(s);
+  const pages={home:$('#page-home'),task:$('#page-task')};
+  const nav={new:'新会话'};
+  function go(name){
+    $('#page-home').style.display= name==='home'?'':'none';
+    $('#page-task').style.display = name==='task'?'':'none';
+    $('#topTitle').textContent= name==='task'?$('#taskTitle').textContent:'新会话';
+    $('#miniBtn').style.display= name==='task'?'':'none';
+    document.querySelectorAll('.sb-item').forEach(b=>b.classList.toggle('on', b.textContent.trim()==='新会话'));
+  }
+  const steps=[
+    ['读取销售数据.xlsx，清洗并汇总','done'],
+    ['生成对比图表与叙事线','run'],
+    ['排版成 12 页 PPT 并终审','wait'],
+    ['交付 Q3复盘.pptx（12 页）','wait'],
+  ];
+  function drawSteps(){
+    $('#steps').innerHTML=steps.map((st,i)=>{
+      const cls=st[1]==='done'?'done':st[1]==='run'?'run':'wait';
+      const dot= cls==='done'?'✓':cls==='run'?'':String(i+1);
+      const sub= cls==='run'?'执行中':cls==='wait'?'待执行':'已完成';
+      return `<li class="step ${cls==='run'?'cur':''}"><span class="dot ${cls}">${dot}</span>
+        <span class="txt">${st[0]}</span><span class="sub">${sub}</span></li>`;
+    }).join('');
+  }
+  function advance(){
+    const idx=steps.findIndex(s=>s[1]==='run');
+    if(idx<0)return;
+    steps[idx][1]='done';
+    if(idx+1<steps.length){steps[idx+1][1]='run'}
+    else{$('#taskBadge').textContent='已完成';$('#taskBadge').className='badge done'}
+    drawSteps();
+    toast(idx+1>=steps.length?'任务完成：成果文件已交付':'步骤进行中…');
+  }
+  let toastT;
+  function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');
+    clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1600);}
+  // 场景卡填充 + 提交
+  document.querySelectorAll('.card').forEach(c=>c.onclick=()=>{
+    $('#inp').value=c.dataset.p;
+  });
+  $('#sendHome').onclick=submit; 
+  $('#inp').addEventListener('keydown',e=>{if(e.key==='Enter')submit()});
+  function submit(){
+    const v=$('#inp').value.trim(); if(!v)return;
+    $('#taskTitle').textContent= v.slice(0,18)+(v.length>18?'…':'');
+    go('task'); advance();
+    setTimeout(advance,900); setTimeout(advance,1800);
+    setTimeout(()=>{toast('任务已提交，专家团队开始执行');},300);
+  }
+  $('#miniBtn').onclick=()=>toast('成果文件面板：后续接入工作空间模块');
+  document.querySelectorAll('.sb-item').forEach(b=>{
+    if(b.dataset.ph){b.onclick=()=>toast('「'+b.getAttribute('data-ph')+'」将在 Phase 3 接入')}
+  });
+  drawSteps(); go('home');
+</script>
+</body>
+</html>
