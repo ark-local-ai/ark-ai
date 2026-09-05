@@ -1,0 +1,32 @@
+# 依赖
+node_modules/
+**/node_modules/
+
+# 构建产物
+dist/
+**/dist/
+*.tsbuildinfo
+
+# 环境/本地
+.env
+.env.local
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# 本机/zcode 工具环境（不进组织仓库）
+.zcode/
+ai-ui-aesthetics/
+
+# 旧目录残留（源码已迁至 apps/frontend）
+ark-app/
+
+# 内部文档（保存在本地，不推送到仓库）
+docs/
