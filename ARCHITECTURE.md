@@ -14,25 +14,27 @@
 ```
 ark/
 ├─ apps/
-│  └─ frontend/          # 前端：Vite + React + TS
-│     ├─ src/
-│     │  ├─ App.tsx          # 路由表（/ 官网；/app/* 工作台）
-│     │  ├─ index.css        # 设计令牌（CSS 变量）
-│     │  ├─ layout/          # 应用壳：Sidebar + Layout + shell.css
-│     │  ├─ components/      # 通用组件 / SVG 图标
-│     │  ├─ data/mock.ts     # 静态类型 + 示例数据（当前为 mock，后接 API）
-│     │  └─ pages/           # 页面组件（Home/Task/Chat/Experts/Skills/Prompts/Automation/Settings/Workspace/Site）
-│     └─ index.html
-├─ docs/                  # 全部规格 / 计划 / 日志文档
-├─ prototype/             # 早期静态原型（历史，可选保留）
+│  ├─ frontend/          # Web 前端：Vite + React + TS
+│  │  ├─ src/
+│  │  │  ├─ App.tsx          # 路由表（/ 官网；/app/* 工作台）
+│  │  │  ├─ index.css        # 设计令牌（CSS 变量）
+│  │  │  ├─ layout/          # 应用壳：Sidebar + Layout + shell.css
+│  │  │  ├─ components/      # 通用组件 / SVG 图标
+│  │  │  ├─ data/mock.ts     # 静态类型 + 示例数据（当前为 mock，后接 API）
+│  │  │  └─ pages/           # 页面组件（Home/Task/Chat/Experts/Skills/Prompts/Automation/Settings/Workspace/Site/Connectors）
+│  │  └─ index.html
+│  ├─ desktop/           # 桌面版前端（Tauri 2）· 规划中，复用 frontend 界面
+│  └─ backend/           # 后端 API / Agent 编排 · 规划中
+├─ docs/                  # 全部规格 / 计划 / 日志文档（本地，不提交）
+├─ screenshots/           # 界面效果展示图（README 引用）
 ├─ ARCHITECTURE.md        # 本文档
 ├─ README.md              # 仓库入口说明
-├─ CONTRIBUTING.md        # 协作约定（可选）
+├─ CONTRIBUTING.md        # 协作约定
 ├─ LICENSE                # 开源协议
 └─ .gitignore
 ```
 
-> 说明：后端未来放 `apps/backend/`。每个 app 独立包管理，暂不需要 PNPM/Turborepo 等 monorepo 工具。
+> 说明：当前仅落地 `apps/frontend`。每个 app 独立包管理，暂不需要 PNPM/Turborepo 等 monorepo 工具。
 
 ## 三、技术栈（apps/frontend）
 
@@ -44,7 +46,7 @@ ark/
 | 样式 | 手写 CSS 设计令牌（无 UI 框架）|
 | 数据 | 当前 mock（`src/data/mock.ts`），未来接 REST/SSE |
 
-设计系统：单一品牌色靛蓝 `#4F46E5` + 暖灰中性色，令牌见 `src/index.css`。详见 `docs/设计令牌_TOKEN.md`。
+设计系统：暖米白 / 米灰中性底 + 单一暖调主色茶褐/琥珀 `#B98B4E`，颜色只用于可点击/选中/强调；令牌见 `src/index.css`。详见 `docs/设计令牌_TOKEN.md`。
 
 ## 四、路由
 
@@ -56,6 +58,7 @@ ark/
 | `/app/chat` | 助理对话 | 多轮消息（mock 回显）|
 | `/app/experts` | 专家广场 | 专家卡 + 创建专属专家 |
 | `/app/skills` | 技能与连接器 | Markdown 技能编辑器 + 连接器状态 |
+| `/app/connectors` | 连接器 | 连接器列表 / 状态 / 接入配置 |
 | `/app/prompts` | 提示词库 | 分类提示词 + 搜索 + 一键使用 |
 | `/app/automation` | 自动化 | 定时任务列表 + 执行历史 |
 | `/app/settings` | 设置 | 分区菜单 + 模型渠道管理 |
