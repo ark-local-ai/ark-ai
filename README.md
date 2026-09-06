@@ -7,16 +7,15 @@
 ## 仓库结构
 ```
 apps/
-  frontend/        # Web 前端（Vite+React+TS）：官网 + 工作台
-  desktop/         # 桌面版前端（同事进行中，Tauri/本地应用）
-  backend/         # 后端 API / Agent 编排（规划中）
+  frontend/        # Web 前端（React+TS+Vite）：官网 + 工作台 ✅ 已实现
+  desktop/         # 桌面版前端（Tauri）· 规划中
+  backend/         # 后端 API / Agent 编排 · 规划中
 docs/              # 内部文档（本地，不提交到仓库）
-prototype/         # 早期静态原型（历史）
 ARCHITECTURE.md    # 架构文档
 CONTRIBUTING.md    # 贡献指南 / 提交规范
 ```
 
-> 说明：当前已实现 `apps/frontend`。`desktop/` 由同事负责（桌面应用），`backend/` 待接入 LLM 与编排后落地。
+> 说明：当前已实现 `apps/frontend`。桌面版（Tauri）与后端（Agent 编排）暂未落地，规划中。
 
 ## 快速开始（前端）
 ```bash

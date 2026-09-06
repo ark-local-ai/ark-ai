@@ -22,15 +22,16 @@ npm run preview      # 预览构建产物
 ## 二、目录结构
 
 ```
-apps/frontend/   # Web 前端（官网 + 工作台）
+apps/frontend/   # Web 前端（官网 + 工作台）· React+TS+Vite
   src/
-    apps/        # 页面组件
+    pages/       # 页面组件
     components/  # 通用组件 / 图标
     data/        # mock 数据与类型
     layout/      # 应用壳（侧边栏/顶栏）
 docs/            # 内部文档（本地，不提交到仓库）
-prototype/       # 早期静态原型（历史）
 ```
+
+> 桌面版前端（Tauri）与后端（Agent 编排）规划中，落地后各占 `apps/desktop/`、`apps/backend/`。
 
 ## 三、分支规范
 
