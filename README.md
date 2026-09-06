@@ -8,14 +8,22 @@
 ```
 apps/
   frontend/        # Web 前端（React+TS+Vite）：官网 + 工作台 ✅ 已实现
-  desktop/         # 桌面版前端（Tauri）· 规划中
+  desktop/         # 桌面版前端（Tauri 2）· 复用 frontend 界面与布局 · 规划中
   backend/         # 后端 API / Agent 编排 · 规划中
 docs/              # 内部文档（本地，不提交到仓库）
 ARCHITECTURE.md    # 架构文档
 CONTRIBUTING.md    # 贡献指南 / 提交规范
 ```
 
-> 说明：当前已实现 `apps/frontend`。桌面版（Tauri）与后端（Agent 编排）暂未落地，规划中。
+> 说明：当前已实现 `apps/frontend`（Web 版）。桌面版前端（Tauri）与后端（Agent 编排）暂未落地，规划中——后续目录见上。
+
+## 界面预览
+
+> 效果图基于当前 Web 版前端（`apps/frontend`）实拍；桌面版（Tauri）复用同一套界面与布局。
+
+| 官网落地页 | 工作台（新会话） |
+|---|---|
+| ![官网落地页](screenshots/site-landing.png) | ![工作台首页](screenshots/workbench-home.png) |
 
 ## 快速开始（前端）
 ```bash
@@ -26,7 +34,7 @@ npm run build      # 生产构建 dist/
 ```
 
 ## 当前进度（摘要）
-- ✅ 前端：官网落地页 + 客户端 9 个页面，路由全部打通（mock 数据）
+- ✅ 前端：官网落地页 + 客户端全页面路由打通（mock 数据）
 - 📍 下一步：接真实后端 + LLM
 - 🤝 参与开发：见 [CONTRIBUTING.md]
 
