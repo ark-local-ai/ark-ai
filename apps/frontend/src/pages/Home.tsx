@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { IconArrowUp } from "../components/icons";
+import {
+  ArkLogo, IconArrowUp, IconChart, IconDoc, IconFolder, IconSearch,
+  IconShield, IconSlides, IconSpark, IconPlus,
+} from "../components/icons";
 
 const SCENES = [
-  { icon: "◍", title: "数据分析", prompt: "帮我分析这份数据，做可视化图表并说明结论" },
-  { icon: "📄", title: "文档写作", prompt: "写一份本周工作周报，重点突出进展和风险" },
-  { icon: "▣", title: "演示文稿", prompt: "做一份产品介绍 PPT，含市场分析和数据图表" },
-  { icon: "◎", title: "深度调研", prompt: "调研一下主要竞品的最新动态，输出对比报告" },
+  { icon: <IconChart size={13} />, title: "数据分析", prompt: "帮我分析这份数据，做可视化图表并说明结论" },
+  { icon: <IconDoc size={13} />, title: "文档写作", prompt: "写一份本周工作周报，重点突出进展和风险" },
+  { icon: <IconSlides size={13} />, title: "演示文稿", prompt: "做一份产品介绍 PPT，含市场分析和数据图表" },
+  { icon: <IconSearch size={13} />, title: "深度调研", prompt: "调研一下主要竞品的最新动态，输出对比报告" },
 ];
 
 export default function Home() {
@@ -19,34 +22,35 @@ export default function Home() {
   return (
     <div className="page">
       <div className="home">
-        <div className="mark-lg">A</div>
+        {/* ARK 线条水印（替代原 A 图标） */}
+        <div className="home-mark"><ArkLogo h={86} thin /></div>
         <h2>今天帮你做些什么？</h2>
         <p className="sub">说出需求，专家团队自主规划，在本地工作空间交付可验收的成果</p>
-        <div className="cards">
+
+        {/* 场景胶囊行 */}
+        <div className="chips">
           {SCENES.map((s) => (
-            <button key={s.title} className="card" onClick={() => setV(s.prompt)}>
-              <div className="c-top">
-                <span className="c-ic" style={{ fontSize: 15, color: "var(--brand)" }}>{s.icon}</span>
-                <b>{s.title}</b>
-              </div>
-              <p>{s.prompt}</p>
+            <button key={s.title} className="chip" onClick={() => setV(s.prompt)}>
+              {s.icon}{s.title}
             </button>
           ))}
         </div>
+
+        {/* 输入卡 */}
         <div className="inputbar">
-          <textarea rows={1} placeholder="今天帮你做些什么？  @引用文件  ·  /调用技能"
+          <textarea rows={2} placeholder="今天帮你做些什么？ @ 引用工作区文件，/ 调用技能与指令"
             value={v} onChange={(e) => setV(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} />
           <div className="row">
-            <span className="pill">＋</span>
-            <span className="pill blue">DeepSeek ▾</span>
-            <span className="pill">连接器 ▾</span>
-            <span className="pill">专家 ▾</span>
-            <span className="pill">技能 ▾</span>
-            <button className="send" onClick={submit}><IconArrowUp /></button>
+            <button className="ic-btn" aria-label="添加附件"><IconPlus size={15} /></button>
+            <button className="send" onClick={submit} aria-label="发送"><IconArrowUp size={14} /></button>
+          </div>
+          <div className="foot">
+            <button className="foot-chip"><IconFolder size={13} />选择工作空间 ▾</button>
+            <button className="foot-chip"><IconShield size={13} />默认权限 ▾</button>
+            <span className="pill ghost auto-pill"><IconSpark size={12} />Auto ▾</span>
           </div>
         </div>
-        <p className="hint">@ 引用工作区文件 · / 调用技能 · 微信扫码即可远程指挥</p>
       </div>
     </div>
   );

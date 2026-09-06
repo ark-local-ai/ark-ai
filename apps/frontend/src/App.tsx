@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import Chat from "./pages/Chat";
 import Experts from "./pages/Experts";
 import Skills from "./pages/Skills";
+import Connectors from "./pages/Connectors";
 import Prompts from "./pages/Prompts";
 import Automation from "./pages/Automation";
 import Settings from "./pages/Settings";
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="chat" element={<Chat />} />
           <Route path="experts" element={<Experts />} />
           <Route path="skills" element={<Skills />} />
+          <Route path="connectors" element={<Connectors />} />
           <Route path="prompts" element={<Prompts />} />
           <Route path="automation" element={<Automation />} />
           <Route path="settings" element={<Settings />} />
