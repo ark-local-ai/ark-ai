@@ -1,53 +1,319 @@
-import { NavLink } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
-  IconHome, IconChat, IconSpark, IconUsers, IconClock, IconFolder, IconGear, IconSearch, IconPlus, IconDoc,
+  IconAssistant, IconChevD, IconChevD2, IconChevU2, IconClock, IconDoc,
+  IconFolder, IconFolderOpen, IconGear, IconLibrary, IconLink, IconNote, IconSearch,
+  IconShare, IconRename, IconDots, IconSpark, IconTrash, IconUsers,
+  ArkLogo, IconCollapse,
 } from "../components/icons";
+import { recentTasks, spaces } from "../data/mock";
 
-function Item({ to, icon, label, end }: { to: string; icon: React.ReactNode; label: string; end?: boolean }) {
+type Mode = "task" | "space";
+
+const NAV = [
+  { to: "/app", label: "新建任务", icon: <IconNote size={15} />, end: true, sub: null as { label: string; to: string; icon: React.ReactNode }[] | null },
+  { to: "/app/chat", label: "助理", icon: <IconAssistant size={15} />, sub: null },
+  {
+    to: "/app/experts", label: "专家 · 技能 · 连接器", icon: <IconUsers size={15} />,
+    sub: [
+      { label: "专家", to: "/app/experts", icon: <IconUsers size={13} /> },
+      { label: "技能", to: "/app/skills", icon: <IconSpark size={13} /> },
+      { label: "连接器", to: "/app/connectors", icon: <IconLink size={13} /> },
+    ],
+  },
+  { to: "/app/automation", label: "自动化", icon: <IconClock size={15} />, sub: null },
+  { to: "/app/workspace", label: "资料库", icon: <IconLibrary size={15} />, sub: null },
+];
+
+export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+  const nav = useNavigate();
+  const [mode, setMode] = useState<Mode>("task");
+  const [findOpen, setFindOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [fold, setFold] = useState<Record<string, boolean>>({});
+  const [delTarget, setDelTarget] = useState<null | { kind: "task" | "space"; id: string }>(null);
+  const [ctxMenu, setCtxMenu] = useState<null | { kind: "task" | "space"; id: string; x: number; y: number; title: string }>(null);
+
+  const [tasks, setTasks] = useState(recentTasks);
+  const [spaceList, setSpaceList] = useState(spaces.filter((s) => s.name !== "默认工作空间"));
+
+  const kw = q.trim().toLowerCase();
+  const matched = useMemo(
+    () => tasks.filter((t) => t.title.toLowerCase().includes(kw)),
+    [kw],
+  );
+
+  const openTask = () => { setFindOpen(false); setMenuOpen(false); nav("/app/task"); };
+
+  const taskList = tasks.filter((t) => !t.space || t.space === "默认工作空间");
+  const spaceGroups = spaceList.map((s) => ({
+    ...s,
+    items: tasks.filter((t) => t.space === s.name),
+  }));
+
+  const toggleFold = (k: string) => setFold((f) => ({ ...f, [k]: !f[k] }));
+  const setAllFold = (v: boolean) => setFold(() => {
+    const all: Record<string, boolean> = {};
+    spaceGroups.forEach((s) => { all[`sp-${s.name}`] = v; });
+    all["tasklist"] = v;
+    return all;
+  });
+  const allFolded = (() => {
+    const keys = [...spaceGroups.map((s) => `sp-${s.name}`), "tasklist"];
+    return keys.every((k) => fold[k]);
+  })();
+
+  const confirmDel = () => {
+    if (!delTarget) return;
+    if (delTarget.kind === "task") {
+      setTasks((ts) => ts.filter((t) => t.id !== delTarget.id));
+    } else {
+      setSpaceList((ls) => ls.filter((s) => s.name !== delTarget.id));
+      setTasks((ts) => ts.filter((t) => t.space !== delTarget.id));
+    }
+    setDelTarget(null);
+  };
+
+  const openCtx = (kind: "task" | "space", id: string, title: string, e: React.MouseEvent) => {
+    const btn = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setCtxMenu({ kind, id, title, x: btn.right - 4, y: btn.bottom + 4 });
+  };
+  const closeCtx = () => setCtxMenu(null);
+
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => `sb-item${isActive ? " on" : ""}`}>
-      <span className="icw">{icon}</span>
-      <span>{label}</span>
-    </NavLink>
+    <aside className={`sb${collapsed ? " collapsed" : ""}`}>
+      {!collapsed && (
+        <>
+          {/* 侧栏头部：左上 ARK·方舟 品牌 + 右侧收起按钮 */}
+          <div className="sb-head">
+            <div className="brandl">
+              <div className="brandrow">
+                <ArkLogo h={15} />
+                <span className="brand-name">方舟</span>
+              </div>
+              <span className="brand-ver">管理 · v0.1.0</span>
+            </div>
+            <button
+              className="sb-collapse"
+              aria-label="收起侧栏"
+              onClick={onToggle}
+            >
+              <IconCollapse size={15} />
+            </button>
+          </div>
+
+          {/* 导航队列 */}
+          <nav className="sb-nav">
+            {NAV.map((n) => (
+              <div className="sb-item-group" key={n.to}>
+                <NavLink to={n.to} end={n.end}
+                  className={({ isActive }) => `sb-item${isActive ? " on" : ""}`}>
+                  <span className="icw">{n.icon}</span>
+                  <span>{n.label}</span>
+                </NavLink>
+                {n.sub && (
+                  <div className="sb-submenu">
+                    {n.sub.map((s) => (
+                      <button key={s.label} className="sb-submenu-item"
+                        onClick={() => { nav(s.to); }}>
+                        {s.icon}{s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </nav>
+
+          {/* 对话 / 空间 切换 + 搜索（搜索固定在侧栏右边缘） */}
+          <div className="sb-switch-wrap">
+            <div className="sb-switch">
+              <div className={`seg${mode === "space" ? " space" : ""}`}>
+                <button className={`seg-btn${mode === "task" ? " on" : ""}`} onClick={() => setMode("task")}>
+                  <IconDoc size={10} /> 对话
+                </button>
+                <button className={`seg-btn${mode === "space" ? " on" : ""}`} onClick={() => setMode("space")}>
+                  <IconFolder size={10} /> 空间
+                </button>
+              </div>
+            </div>
+            {mode === "space" && (
+              <button
+                className="sb-expall"
+                aria-label={allFolded ? "展开全部" : "收起全部"}
+                title={allFolded ? "展开全部" : "收起全部"}
+                onClick={() => setAllFold(!allFolded)}
+              >
+                {allFolded ? <IconChevD2 size={14} /> : <IconChevU2 size={14} />}
+              </button>
+            )}
+            <button className={`sb-find${findOpen ? " on" : ""}`} aria-label="搜索"
+              onClick={() => { setFindOpen((v) => !v); setQ(""); }}>
+              <IconSearch size={14} />
+            </button>
+          </div>
+
+          {/* 面板 */}
+          <div className="sb-panel">
+            {mode === "task" ? (
+              /* 对话：全量视图，所有对话（不论空间）直接平铺 */
+              <div className="sb-grpwrap">
+                {tasks.map((t) => (
+                  <Row key={t.id} title={t.title} time={t.time} onClick={openTask}
+                    onMenu={(e) => openCtx("task", t.id, t.title, e)} />
+                ))}
+                {tasks.length === 0 && <div className="sb-empty">暂无对话</div>}
+              </div>
+            ) : (
+              /* 空间：按空间分类，未命名/默认对话放进「任务」抽屉 */
+              <>
+                {spaceGroups.map((s) => {
+                  const items = s.items;
+                  const key = `sp-${s.name}`;
+                  return (
+                    <div className="sb-grpwrap" key={s.name}>
+                      <button className="sb-grp" onClick={() => toggleFold(key)}>
+                        <IconChevD size={12} className={fold[key] ? "fold" : ""} />
+                        <IconFolder size={12} />
+                        <span className="lb">{s.name}</span>
+                        <span className="grp-add" onClick={(e) => { e.stopPropagation(); setMode("task"); nav("/app"); }}>
+                          <IconNote size={13} />
+                        </span>
+                        <span className="grp-del" onClick={(e) => { e.stopPropagation(); openCtx("space", s.name, s.name, e); }}>
+                          <IconDots size={13} />
+                        </span>
+                      </button>
+                      {!fold[key] && items.map((t) => (
+                        <Row key={t.id} title={t.title} time={t.time} onClick={openTask}
+                          onMenu={(e) => openCtx("task", t.id, t.title, e)} />
+                      ))}
+                    </div>
+                  );
+                })}
+
+                {/* 任务抽屉：未指定命名空间/默认新建的对话 */}
+                <div className="sb-grpwrap">
+                  <button className="sb-grp" onClick={() => toggleFold("tasklist")}>
+                    <IconChevD size={12} className={fold.tasklist ? "fold" : ""} />
+                    <IconDoc size={12} />
+                    <span className="lb">任务</span>
+                  </button>
+                  {!fold.tasklist && taskList.map((t) => (
+                    <Row key={t.id} title={t.title} time={t.time} onClick={openTask}
+                      onMenu={(e) => openCtx("task", t.id, t.title, e)} />
+                  ))}
+                  {taskList.length === 0 && <div className="sb-empty">暂无对话</div>}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 用户区 + 头像菜单 */}
+          <div className="sb-user-wrap">
+            {menuOpen && (
+              <>
+                <div className="sb-overlay" onClick={() => setMenuOpen(false)} />
+                <div className="sb-menu">
+                  <button className="sb-menu-item" onClick={() => { setMenuOpen(false); nav("/app/settings"); }}>
+                    <IconGear size={14} /> 设置
+                  </button>
+                  <div className="sb-menu-meta">Ark v0.1.0 · 本地运行 · 数据不出本机</div>
+                </div>
+              </>
+            )}
+            <button className="sb-user" onClick={() => setMenuOpen((v) => !v)}>
+              <span className="ava">管</span>
+              <span className="sb-user-t">
+                <b>超级管理员</b>
+                <span>本地工作区</span>
+              </span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* 居中搜索弹板 */}
+      {findOpen && (
+        <>
+          <div className="sb-overlay" style={{ zIndex: 75 }} onClick={() => setFindOpen(false)} />
+          <div className="sb-search-pop">
+            <div className="sb-search-input">
+              <IconSearch size={16} />
+              <input autoFocus placeholder="搜索任务…" value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setFindOpen(false)} />
+            </div>
+            <div className="sb-pop-sub">最近任务</div>
+            <div className="sb-pop-list">
+              {matched.map((t) => <Row key={t.id} title={t.title} time={t.time} onClick={openTask} />)}
+              {matched.length === 0 && <div className="sb-pop-empty">没有找到相关任务</div>}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 行/分组 更多操作菜单 */}
+      {ctxMenu && (
+        <>
+          <div className="sb-overlay" style={{ zIndex: 88 }} onClick={closeCtx} />
+          <div className="sb-ctx" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+            {ctxMenu.kind === "space" ? (
+              <>
+                <button className="sb-ctx-item" onClick={closeCtx}><IconFolderOpen size={14} /> 打开文件夹</button>
+                <button
+                  className="sb-ctx-item danger"
+                  onClick={() => { setCtxMenu(null); setDelTarget({ kind: "space", id: ctxMenu.id }); }}
+                >
+                  <IconTrash size={14} /> 从列表中删除
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="sb-ctx-item" onClick={closeCtx}><IconFolderOpen size={14} /> 打开文件夹</button>
+                <button className="sb-ctx-item" onClick={closeCtx}><IconRename size={14} /> 重命名</button>
+                <button className="sb-ctx-item" onClick={closeCtx}><IconShare size={14} /> 分享任务</button>
+                <button
+                  className="sb-ctx-item danger"
+                  onClick={() => { setCtxMenu(null); setDelTarget({ kind: "task", id: ctxMenu.id }); }}
+                >
+                  <IconTrash size={14} /> 删除任务
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* 删除确认提示框 */}
+      {delTarget && (
+        <>
+          <div className="sb-overlay" style={{ zIndex: 85 }} onClick={() => setDelTarget(null)} />
+          <div className="sb-confirm">
+            <p>{delTarget.kind === "space" ? "删除这个工作空间？" : "删除这条对话？"}</p>
+            <span className="confirm-sub">此操作不可撤销</span>
+            <div className="confirm-actions">
+              <button className="btn ghost sm" onClick={() => setDelTarget(null)}>取消</button>
+              <button className="btn danger sm" onClick={confirmDel}>删除</button>
+            </div>
+          </div>
+        </>
+      )}
+    </aside>
   );
 }
 
-export default function Sidebar() {
+function Row({ title, time, onClick, onMenu }: { title: string; time: string; onClick: () => void; onMenu?: (e: React.MouseEvent) => void }) {
   return (
-    <aside className="sb">
-      <div className="sb-logo">
-        <div className="mark">A</div>
-        <div className="sb-name">
-          <b>Ark</b>
-          <span>方舟</span>
-        </div>
-      </div>
-      <button className="sb-new" onClick={() => (location.href = "/app")}>
-        <span className="icw"><IconPlus /></span> 新任务
-      </button>
-      <div className="sb-sec">工作 · 对话</div>
-      <Item to="/app" end icon={<IconHome />} label="新会话" />
-      <Item to="/app/chat" icon={<IconChat />} label="助理对话" />
-      <Item to="/app/experts" icon={<IconUsers />} label="专家广场" />
-      <Item to="/app/skills" icon={<IconSpark />} label="技能与连接器" />
-      <Item to="/app/prompts" icon={<IconDoc />} label="提示词" />
-      <Item to="/app/automation" icon={<IconClock />} label="自动化" />
-      <Item to="/app/workspace" icon={<IconFolder />} label="工作空间" />
-      <div className="sb-sec">系统</div>
-      <Item to="/app/settings" icon={<IconGear />} label="设置" />
-
-      <div className="sb-search">
-        <IconSearch />
-        <input placeholder="搜索对话、页面、技能…" />
-        <kbd>Ctrl K</kbd>
-      </div>
-      <div className="sb-user">
-        <div className="ava">管</div>
-        <div className="sb-user-t">
-          <b>超级管理员</b>
-          <span>本地工作区</span>
-        </div>
-      </div>
-    </aside>
+    <div className="sb-row" onClick={onClick}>
+      <span className="tt">{title}</span>
+      <span className="tm">{time}</span>
+      {onMenu && (
+        <button className="row-x" aria-label="任务操作" title="更多"
+          onClick={(e) => { e.stopPropagation(); onMenu(e); }}>
+          <IconDots size={14} />
+        </button>
+      )}
+    </div>
   );
 }

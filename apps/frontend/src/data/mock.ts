@@ -24,6 +24,19 @@ export interface Job { id: string; name: string; trigger: string; action: string
 export interface JobLog { time: string; name: string; result: string; ok: boolean }
 export interface AppFile { name: string; kind: string; size: string; time: string; status?: string; statusColor?: string }
 export interface SpaceFile { name: string; dir: boolean; color?: string }
+export interface RecentTask { id: string; title: string; time: string; space: string | null }
+
+// ---- 侧栏 · 最近任务（space = null 表示未归入任何工作空间） ----
+export const recentTasks: RecentTask[] = [
+  { id: "r1", title: "C盘清理建议与文件确认", time: "14小时", space: null },
+  { id: "r2", title: "ds harness 和 glm harness 对接联调", time: "2天前", space: null },
+  { id: "r3", title: "分析简历与面试项目准备", time: "25天前", space: null },
+  { id: "r4", title: "Q3 竞品分析报告 PPT", time: "2天前", space: "默认工作空间" },
+  { id: "r5", title: "销售数据清洗与可视化", time: "3天前", space: "默认工作空间" },
+  { id: "r6", title: "项目周报汇总（第 36 周）", time: "5天前", space: "项目集 · 数字人" },
+  { id: "r7", title: "数字人形象方案比选", time: "6天前", space: "项目集 · 数字人" },
+  { id: "r8", title: "运维巡检月报生成", time: "7天前", space: "运维 · 2026" },
+];
 
 // ---- 示例：任务 ----
 export const sampleTask: Task = {
