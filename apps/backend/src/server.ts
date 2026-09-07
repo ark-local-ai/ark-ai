@@ -4,6 +4,7 @@ import { createReadStream } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { taskRoutes } from "./routes/tasks.js";
+import { channelRoutes } from "./routes/channels.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workDir = join(__dirname, "..", "..", "frontend", "public", "workspace");
@@ -15,6 +16,7 @@ export async function buildApp() {
 
   // API 路由
   app.register(taskRoutes, { prefix: "/api/tasks" });
+  app.register(channelRoutes, { prefix: "/api/channels" });
 
   // 工作空间静态文件（成果下载）
   app.get("/api/workspace/*", (req, reply) => {
