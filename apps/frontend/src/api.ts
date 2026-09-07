@@ -298,3 +298,16 @@ export async function testChannel(id: string): Promise<{ ok: boolean }> {
   const res = await fetch(`${BASE}/api/channels/${id}/test`, { method: "POST" });
   return res.json();
 }
+
+export interface ConnectorDto {
+  name: string;
+  online: boolean;
+  note: string;
+  dot: string;
+}
+
+export async function listConnectors(): Promise<ConnectorDto[]> {
+  const res = await fetch(`${BASE}/api/connectors`);
+  if (!res.ok) throw new Error(`获取连接器失败: ${res.status}`);
+  return res.json();
+}

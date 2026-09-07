@@ -9,6 +9,7 @@ import { chatRoutes } from "./routes/chat.js";
 import { skillRoutes } from "./routes/skills.js";
 import { expertRoutes } from "./routes/experts.js";
 import { jobRoutes } from "./routes/jobs.js";
+import { connectorRoutes } from "./routes/connectors.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { startScheduler } from "./scheduler/jobs.js";
 
@@ -27,6 +28,7 @@ export async function buildApp() {
   app.register(skillRoutes, { prefix: "/api/skills" });
   app.register(expertRoutes, { prefix: "/api/experts" });
   app.register(jobRoutes, { prefix: "/api/jobs" });
+  app.register(connectorRoutes, { prefix: "/api/connectors" });
 
   // 工作空间列表（真目录扫描）
   app.get("/api/workspace", async () => {
