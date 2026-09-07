@@ -188,3 +188,62 @@ export async function listExperts(): Promise<ExpertDto[]> {
   if (!res.ok) throw new Error(`获取专家失败: ${res.status}`);
   return res.json();
 }
+
+export interface JobDto {
+  id: string;
+  name: string;
+  schedule: string;
+  action: string;
+  push: string;
+  enabled: boolean;
+  next: string;
+}
+export interface JobLogDto {
+  id: number;
+  jobId: string;
+  name: string;
+  time: string;
+  result: string;
+  ok: boolean;
+}
+
+export async function listJobs(): Promise<JobDto[]> {
+  const res = await fetch(`${BASE}/api/jobs`);
+  if (!res.ok) throw new Error(`获取任务失败: ${res.status}`);
+  return res.json();
+}
+
+export async function createJob(p: { name: string; schedule: string; action: string; push?: string; enabled?: boolean }): Promise<JobDto> {
+  const res = await fetch(`${BASE}/api/jobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(p),
+  });
+  if (!res.ok) throw new Error(`创建任务失败: ${res.status}`);
+  return res.json();
+}
+
+export async function updateJob(id: string, body: Partial<JobDto>): Promise<JobDto> {
+  const res = await fetch(`${BASE}/api/jobs/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`更新任务失败: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteJob(id: string): Promise<void> {
+  await fetch(`${BASE}/api/jobs/${id}`, { method: "DELETE" });
+}
+
+export async function runJobNow(id: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE}/api/jobs/${id}/run`, { method: "POST" });
+  return res.json();
+}
+
+export async function listJobLogs(): Promise<JobLogDto[]> {
+  const res = await fetch(`${BASE}/api/jobs/logs`);
+  if (!res.ok) throw new Error(`获取执行历史失败: ${res.status}`);
+  return res.json();
+}
