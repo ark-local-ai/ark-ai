@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconSearch } from "../components/icons";
-import { scenarios } from "../data/mock";
-import type { Scenario } from "../data/mock";
+import { scenarios as mockScenarios } from "../data/mock";
+import { listScenarios, type ScenarioDto } from "../api";
 
 export default function Prompts() {
   const nav = useNavigate();
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState<Scenario | null>(null);
+  const [open, setOpen] = useState<ScenarioDto | null>(null);
+  const [scenarios, setScenarios] = useState<ScenarioDto[]>(mockScenarios);
+  useEffect(() => { listScenarios().then(setScenarios).catch(() => {}); }, []);
 
   const kw = query.trim().toLowerCase();
   const shown = useMemo(() => {
@@ -21,7 +23,7 @@ export default function Prompts() {
   }, [kw]);
 
   // 「使用」：带上场景名与提示词，回填到首页输入台（生成场景标签 + 正文）
-  const usePrompt = (sc: Scenario, prompt: string) => {
+  const usePrompt = (sc: ScenarioDto, prompt: string) => {
     nav("/app", { state: { scene: sc.name, prompt } });
   };
 

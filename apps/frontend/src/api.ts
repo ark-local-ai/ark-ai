@@ -311,3 +311,18 @@ export async function listConnectors(): Promise<ConnectorDto[]> {
   if (!res.ok) throw new Error(`获取连接器失败: ${res.status}`);
   return res.json();
 }
+
+export interface ScenarioDto {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  desc: string;
+  prompts: { text: string; note: string }[];
+}
+
+export async function listScenarios(): Promise<ScenarioDto[]> {
+  const res = await fetch(`${BASE}/api/scenarios`);
+  if (!res.ok) throw new Error(`获取场景失败: ${res.status}`);
+  return res.json();
+}
