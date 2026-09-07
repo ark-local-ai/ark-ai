@@ -7,6 +7,10 @@ dist/
 **/dist/
 *.tsbuildinfo
 
+# Rust (Tauri) 编译产物
+**/src-tauri/target/
+**/src-tauri/gen/schemas/
+
 # 环境/本地
 .env
 .env.local
