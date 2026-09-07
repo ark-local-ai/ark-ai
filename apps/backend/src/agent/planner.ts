@@ -69,7 +69,7 @@ function scriptedPlan(prompt: string): PlannedStep[] {
 }
 
 // ---- LLM 拆解（JSON 输出，失败即抛 → 上层 catch 降级）----
-async function llmPlan(prompt: string): Promise<PlannedStep[]> {
+async function llmPlan(prompt: string): Promise<{ steps: PlannedStep[]; model: string }> {
   const ch = pickChannel();
   if (!ch) throw new Error("未配置模型渠道");
   const sys =
@@ -82,26 +82,28 @@ async function llmPlan(prompt: string): Promise<PlannedStep[]> {
     const arr = JSON.parse(raw) as { title?: string; note?: string }[];
     if (!Array.isArray(arr) || !arr.length) throw new Error("LLM 未返回有效步骤");
     recordSuccess(ch.id);
-    return arr
+    const steps = arr
       .filter((s) => typeof s?.title === "string" && s.title.trim())
       .slice(0, 6)
       .map((s) => ({ title: s.title!.trim(), note: s.note?.trim() }));
+    return { steps, model: `${ch.name} · ${ch.model}` };
   } catch (e) {
     recordFailure(ch.id); // 记录失败，router 下次优选更稳渠道
     throw e;
   }
 }
 
-/** 主入口：优先 LLM，失败降级脚本。暴露 usedFallback 供编排层标记模型。 */
+/** 主入口：优先 LLM，失败降级脚本。暴露 viaLLM / model 供编排层标记。 */
 export async function planTask(prompt: string): Promise<{
   steps: PlannedStep[];
   viaLLM: boolean;
+  model: string;
 }> {
   try {
     await sleep(300); // 让前端先收到 plan 前能显示"规划中"
-    const steps = await llmPlan(prompt);
-    return { steps, viaLLM: true };
+    const { steps, model } = await llmPlan(prompt);
+    return { steps, viaLLM: true, model };
   } catch {
-    return { steps: scriptedPlan(prompt), viaLLM: false };
+    return { steps: scriptedPlan(prompt), viaLLM: false, model: "内置计划器" };
   }
 }
