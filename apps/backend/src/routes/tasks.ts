@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { runTask } from "../agent/orchestrator.js";
-import { getTask } from "../db/store.js";
+import { getTask, listTasks } from "../db/store.js";
 import { subscribe } from "../agent/events.js";
 
 export async function taskRoutes(app: FastifyInstance) {
@@ -16,6 +16,9 @@ export async function taskRoutes(app: FastifyInstance) {
     void runTask(id, prompt);
     return reply.code(201).send({ taskId: id });
   });
+
+  // 任务列表摘要（侧栏「最近任务」）
+  app.get("/", async () => listTasks(50));
 
   // 查询任务当前快照
   app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {
