@@ -6,6 +6,7 @@ import {
   insertArtifact, getTask, updateTaskChecksAndTimeline,
 } from "../db/store";
 import { publish } from "./events";
+import { planTask } from "./planner";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -14,23 +15,20 @@ const workDir = join(process.cwd(), "..", "frontend", "public", "workspace");
 mkdirSync(workDir, { recursive: true });
 
 /**
- * 里程碑1：mock 编排 —— 用预置计划拆步骤、逐条执行、生成一个真实 .md 交付文件。
- * 标记 LLM 真实拆解为接入点：future: plannerLLM(prompt) => Step[]
+ * 里程碑2：编排闭环 —— 用 planner 拆步骤（优先 LLM，无渠道降级脚本），
+ * 逐条执行、生成真实交付文件。LLM 真实拆解已接入：planner.ts。
  */
 export async function runTask(id: string, prompt: string): Promise<Task> {
   const title = prompt.slice(0, 20) || "未命名任务";
   const created = new Date().toLocaleString("zh-CN", { hour12: false });
 
-  // 演示计划（后续换成 LLM 拆解）
-  const plan: string[] = [
-    "理解需求并制定执行计划",
-    "收集与组织所需信息",
-    "生成成果初稿",
-    "校对并交付最终文件",
-  ];
+  // 规划：优先 LLM 拆真步骤，失败降级脚本
+  const { steps: planned, viaLLM } = await planTask(prompt);
+  const plan = planned.map((p) => p.title);
+  const modelUsed = viaLLM ? "LLM" : "内置计划器";
 
   const task: Task = {
-    id, title, prompt, status: "queue", model: "DeepSeek", expert: "数据分析师",
+    id, title, prompt, status: "queue", model: modelUsed, expert: "数据分析师",
     skills: ["文件生成"], workspace: "默认工作空间",
     steps: [],
     artifacts: [],
@@ -85,10 +83,10 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
     if (stepIdx === plan.length - 1) {
       // 最后一步行：生成真实交付文件
       const fileName = `${title}-${id}.md`;
-      const content = `# ${title}\n\n> 请选择意图：${prompt}\n\n## 生成时间\n${new Date().toLocaleString("zh-CN", { hour12: false })}\n\n## 说明\n这是一份由 Ark 编排层生成的示例成果（里程碑1 mock 交付文件）。\n`;
+      const content = `# ${title}\n\n> 需求：${prompt}\n\n## 生成时间\n${new Date().toLocaleString("zh-CN", { hour12: false })}\n\n## 规划步骤\n${plan.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n\n## 说明\n这是一份由 Ark 编排层生成的成果文件（${modelUsed} 拆解计划后产出，可编辑）。\n`;
       writeFileSync(join(workDir, fileName), content, "utf8");
 
-      const deliver: Artifact = { name: fileName, kind: "md", note: "里程碑1 示例交付文件 · 可编辑", path: fileName };
+      const deliver: Artifact = { name: fileName, kind: "md", note: "Ark 生成成果文件 · 可编辑", path: fileName };
       insertArtifact(deliver, id, 1);
       task.deliverable = deliver;
       publish({ type: "deliver", taskId: id, data: deliver });
@@ -115,7 +113,6 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
   publish({ type: "done", taskId: id, data: { taskId: id } });
 
   // 把最终 checks 与 timeline 写回库，供查询快照一致
-  console.log("[DEBUG] final checks:", JSON.stringify(task.checks));
   updateTaskChecksAndTimeline(id, task.checks, task.timeline);
   // 重新落库最终状态供查询
   const saved = getTask(id);
