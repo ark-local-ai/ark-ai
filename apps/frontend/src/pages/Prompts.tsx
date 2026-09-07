@@ -1,40 +1,93 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { IconSearch } from "../components/icons";
-
-const GROUPS: { name: string; items: string[] }[] = [
-  { name: "写作", items: ["写一份周报，突出进展、风险与下一步", "把要点改写成正式邮件", "润色这段文字，更有说服力"] },
-  { name: "调研", items: ["调研竞品最新动态，输出对比报告", "整理这份资料的要点与引用", "分析某话题的趋势"] },
-  { name: "数据", items: ["读 Excel 出可视化图表并说明结论", "汇总多表数据生成月度报表", "找出异常数据并解释"] },
-  { name: "设计", items: ["把大纲做成 15 页路演 PPT", "生成小红书的 9 张图", "设计一份招聘海报文案"] },
-];
+import { scenarios } from "../data/mock";
+import type { Scenario } from "../data/mock";
 
 export default function Prompts() {
+  const nav = useNavigate();
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState<Scenario | null>(null);
+
+  const kw = query.trim().toLowerCase();
+  const shown = useMemo(() => {
+    if (!kw) return scenarios;
+    return scenarios.filter(
+      (s) =>
+        s.name.toLowerCase().includes(kw) ||
+        s.desc.toLowerCase().includes(kw) ||
+        s.prompts.some((p) => p.text.toLowerCase().includes(kw)),
+    );
+  }, [kw]);
+
+  // 「使用」：带上场景名与提示词，回填到首页输入台（生成场景标签 + 正文）
+  const usePrompt = (sc: Scenario, prompt: string) => {
+    nav("/app", { state: { scene: sc.name, prompt } });
+  };
+
+  /* ---------- 场景详情视图 ---------- */
+  if (open) {
+    return (
+      <div className="page">
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <div className="scene-detail-head">
+            <button className="btn ghost sm" onClick={() => setOpen(null)}>
+              ‹ 全部场景
+            </button>
+            <div className="scene-detail-title">
+              <span className="scene-ava" style={{ background: open.color }}>{open.icon}</span>
+              <div>
+                <b>{open.name}</b>
+                <span className="scene-detail-desc">{open.desc}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="scene-prompt-list">
+            {open.prompts.map((p, i) => (
+              <div key={i} className="card scene-prompt">
+                <div className="sp-text">{p.text}</div>
+                <div className="sp-foot">
+                  <span className="pill ghost">{p.note}</span>
+                  <button className="btn primary sm" onClick={() => usePrompt(open, p.text)}>
+                    使用
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- 场景列表视图 ---------- */
   return (
     <div className="page">
-      <div style={{ maxWidth: 760, margin: "0 auto" }}>
+      <div style={{ maxWidth: 820, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
           <div className="sb-search" style={{ flex: 1, maxWidth: 340, margin: 0 }}>
             <IconSearch />
-            <input placeholder="搜索提示词…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input placeholder="搜索场景或提示词…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
-          <button className="btn primary" style={{ marginLeft: "auto" }}>＋ 新建提示词</button>
+          <button className="btn primary" style={{ marginLeft: "auto" }} onClick={() => nav("/app")}>
+            ＋ 新建任务
+          </button>
         </div>
-        {GROUPS.map((g) => {
-          const items = g.items.filter((i) => i.includes(query));
-          if (query && items.length === 0) return null;
-          return (
-            <div key={g.name} className="card" style={{ padding: 18, marginBottom: 16 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10, color: "var(--text-2)" }}>{g.name}</div>
-              {items.map((i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "1px solid var(--line)" }}>
-                  <span style={{ fontSize: 13.5 }}>{i}</span>
-                  <button className="btn soft sm" style={{ marginLeft: "auto" }}>使用</button>
-                </div>
-              ))}
-            </div>
-          );
-        })}
+
+        <div className="scene-grid">
+          {shown.map((s) => (
+            <button key={s.id} className="card scene-card" onClick={() => setOpen(s)}>
+              <div className="sc-top">
+                <span className="scene-ava" style={{ background: s.color }}>{s.icon}</span>
+                <span className="sc-count">{s.prompts.length} 条提示词</span>
+              </div>
+              <div className="sc-name">{s.name}</div>
+              <div className="sc-desc">{s.desc}</div>
+            </button>
+          ))}
+        </div>
+        {shown.length === 0 && <div className="empty" style={{ height: 160 }}>没有找到相关场景</div>}
       </div>
     </div>
   );

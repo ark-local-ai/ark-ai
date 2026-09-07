@@ -26,6 +26,60 @@ export interface AppFile { name: string; kind: string; size: string; time: strin
 export interface SpaceFile { name: string; dir: boolean; color?: string }
 export interface RecentTask { id: string; title: string; time: string; space: string | null }
 
+// ---- 场景库（WorkBuddy 式封装：「场景」→「参考提示词」，选中后落到首页输入台） ----
+export interface ScenePrompt { text: string; note: string }
+export interface Scenario {
+  id: string; name: string; icon: string; color: string; desc: string;
+  prompts: ScenePrompt[];
+}
+export const scenarios: Scenario[] = [
+  {
+    id: "docops", name: "文档处理", icon: "档", color: "var(--ok)",
+    desc: "下载、转换、汇总为 PDF / Excel / Word 成品", prompts: [
+      { text: "帮我下载腾讯2025中期报告完整财报 PDF，从 PDF 中提取财务数据，创建一个 Excel 财务模型（包含公式和格式），再制作一份演示文稿，最后生成一份包含完整分析的 Word 报告（带目录和页眉页脚）", note: "财报分析全流程" },
+      { text: "把这份 Markdown 文档排版转换为 PDF，要求封面、目录与页码齐全", note: "MD转PDF文档" },
+      { text: "对比三个竞品的定位、功能与定价，输出一份对比分析报告", note: "竞品对比分析" },
+      { text: "把本周多条项目动态汇总成一份项目周报，排版为 Word 文档", note: "项目周报转Word" },
+    ],
+  },
+  {
+    id: "writing", name: "文档写作", icon: "文", color: "var(--brand)",
+    desc: "周报、邮件、文案等场景化写作", prompts: [
+      { text: "写一份本周工作周报，突出进展、风险与下一步计划，分点列出", note: "标准周报" },
+      { text: "把下面几项要点改写成一封发给领导的正式工作邮件", note: "邮件版" },
+      { text: "润色这段文字，让表达更专业、更有说服力", note: "润色" },
+    ],
+  },
+  {
+    id: "data", name: "数据分析", icon: "数", color: "#0e9bac",
+    desc: "读数据出图表、报表与异常解释", prompts: [
+      { text: "读取这份 Excel，生成可视化图表并说明关键结论", note: "图表+结论" },
+      { text: "汇总多个工作表数据，生成一份月度经营报表", note: "月度报表" },
+      { text: "找出这批数据中的异常值，并解释可能的原因", note: "异常排查" },
+    ],
+  },
+  {
+    id: "slides", name: "演示文稿", icon: "演", color: "#e8853c",
+    desc: "把大纲排成结构清晰的 PPT", prompts: [
+      { text: "把这份大纲做成 15 页路演 PPT，含市场分析与数据图表", note: "路演版" },
+      { text: "把产品介绍排成 8 页极简风格 PPT，每页一个核心卖点", note: "产品介绍" },
+    ],
+  },
+  {
+    id: "research", name: "深度调研", icon: "调", color: "var(--warn)",
+    desc: "多信息来源的竞品与趋势对比", prompts: [
+      { text: "调研主要竞品的最新动态，输出一份对比报告并给建议", note: "竞品对比" },
+      { text: "梳理这个行业近期的关键趋势，整理成带引用的要点", note: "行业趋势" },
+    ],
+  },
+  {
+    id: "meeting", name: "会议纪要", icon: "会", color: "#7c5cf0",
+    desc: "把讨论整理成结构化的纪要", prompts: [
+      { text: "把这段会议讨论整理成纪要：议题、结论、待办与责任人", note: "结构化纪要" },
+    ],
+  },
+];
+
 // ---- 侧栏 · 最近任务（space = null 表示未归入任何工作空间） ----
 export const recentTasks: RecentTask[] = [
   { id: "r1", title: "C盘清理建议与文件确认", time: "14小时", space: null },

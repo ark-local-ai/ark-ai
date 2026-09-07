@@ -1,24 +1,42 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
-  ArkLogo, IconArrowUp, IconChart, IconDoc, IconFolder, IconSearch,
-  IconShield, IconSlides, IconSpark, IconPlus,
+  ArkLogo, IconArrowUp, IconChevD, IconFolder,
+  IconShield, IconSpark, IconPlus, IconX,
 } from "../components/icons";
-
-const SCENES = [
-  { icon: <IconChart size={13} />, title: "数据分析", prompt: "帮我分析这份数据，做可视化图表并说明结论" },
-  { icon: <IconDoc size={13} />, title: "文档写作", prompt: "写一份本周工作周报，重点突出进展和风险" },
-  { icon: <IconSlides size={13} />, title: "演示文稿", prompt: "做一份产品介绍 PPT，含市场分析和数据图表" },
-  { icon: <IconSearch size={13} />, title: "深度调研", prompt: "调研一下主要竞品的最新动态，输出对比报告" },
-];
+import { scenarios } from "../data/mock";
+import { createTask } from "../api";
 
 export default function Home() {
   const nav = useNavigate();
-  const [v, setV] = useState("");
-  const submit = () => {
-    if (!v.trim()) return;
-    nav("/app/task"); // mock：跳转任务页（后续接入真实创建）
+  const loc = useLocation();
+  // 场景库「使用」跳回时带入 { scene, prompt }，与芯片选中的落点一致
+  const preset = (loc.state as { scene?: string; prompt?: string } | null) ?? null;
+  const [v, setV] = useState(preset?.prompt ?? "");
+  const [tag, setTag] = useState<string | null>(preset?.scene ?? null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const applyPrompt = (sceneName: string, prompt: string) => {
+    setTag(sceneName);
+    setV(prompt);
+    setOpenId(null);
   };
+
+  const submit = async () => {
+    if (!v.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      const taskId = await createTask(v.trim());
+      nav(`/app/task?taskId=${taskId}`);
+    } catch (e) {
+      console.error(e);
+      alert("创建任务失败，请确认后端已启动（npm run dev —— apps/backend）");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="page">
       <div className="home">
@@ -27,17 +45,48 @@ export default function Home() {
         <h2>今天帮你做些什么？</h2>
         <p className="sub">说出需求，专家团队自主规划，在本地工作空间交付可验收的成果</p>
 
-        {/* 场景胶囊行 */}
+        {/* 场景胶囊行：点开下拉该场景的参考提示词（WorkBuddy 式封装） */}
         <div className="chips">
-          {SCENES.map((s) => (
-            <button key={s.title} className="chip" onClick={() => setV(s.prompt)}>
-              {s.icon}{s.title}
-            </button>
+          {scenarios.map((s) => (
+            <div className="chip-wrap" key={s.id}>
+              <button
+                className={`chip${openId === s.id ? " on" : ""}`}
+                onClick={() => setOpenId(openId === s.id ? null : s.id)}
+              >
+                {s.name}<IconChevD size={11} />
+              </button>
+              {openId === s.id && (
+                <div className="chip-menu">
+                  <div className="chip-menu-h">{s.desc}</div>
+                  {s.prompts.map((p, i) => (
+                    <button key={i} className="chip-menu-item"
+                      onClick={() => applyPrompt(s.name, p.text)}>
+                      <span className="cm-note">{p.note}</span>
+                      <span className="cm-text">{p.text}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
+          <button className="chip" onClick={() => nav("/app/prompts")}>
+            全部场景<IconChevD size={11} className="rot" />
+          </button>
         </div>
+        {openId && <div className="menu-overlay" onClick={() => setOpenId(null)} />}
 
-        {/* 输入卡 */}
+        {/* 输入卡：场景标签（可移除）+ 提示词正文 */}
         <div className="inputbar">
+          {tag && (
+            <div className="input-tags">
+              <span className="input-tag">
+                {tag}
+                <button className="tag-x" aria-label="移除场景" onClick={() => setTag(null)}>
+                  <IconX size={10} />
+                </button>
+              </span>
+            </div>
+          )}
           <textarea rows={2} placeholder="今天帮你做些什么？ @ 引用工作区文件，/ 调用技能与指令"
             value={v} onChange={(e) => setV(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} />

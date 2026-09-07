@@ -9,7 +9,7 @@ const TITLES: Record<string, string> = {
   "/app/experts": "专家",
   "/app/skills": "技能",
   "/app/connectors": "连接器",
-  "/app/prompts": "提示词",
+  "/app/prompts": "场景库",
   "/app/automation": "自动化",
   "/app/workspace": "资料库",
   "/app/settings": "设置",
