@@ -56,3 +56,18 @@ export function subscribeTask(id: string, onEvent: SseHandler): () => void {
 export function workspaceUrl(name: string): string {
   return `${BASE}/api/workspace/${encodeURIComponent(name)}`;
 }
+
+export interface WorkspaceFileDto {
+  name: string;
+  kind: string;
+  size: number;
+  sizeText: string;
+  time: string;
+}
+
+/** 工作空间真目录扫描：列出交付文件（类型/大小/时间） */
+export async function listWorkspace(): Promise<WorkspaceFileDto[]> {
+  const res = await fetch(`${BASE}/api/workspace`);
+  if (!res.ok) throw new Error(`获取工作空间失败: ${res.status}`);
+  return res.json();
+}
