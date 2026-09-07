@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArkLogo, IconArrowUp, IconChevD, IconFolder,
   IconShield, IconSpark, IconPlus, IconX,
 } from "../components/icons";
-import { scenarios } from "../data/mock";
-import { createTask } from "../api";
+import { scenarios as mockScenarios } from "../data/mock";
+import { createTask, listScenarios, type ScenarioDto } from "../api";
 
 export default function Home() {
   const nav = useNavigate();
@@ -16,6 +16,9 @@ export default function Home() {
   const [tag, setTag] = useState<string | null>(preset?.scene ?? null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [scenarios, setScenarios] = useState<ScenarioDto[]>(mockScenarios);
+  useEffect(() => { listScenarios().then(setScenarios).catch(() => {}); }, []);
 
   const applyPrompt = (sceneName: string, prompt: string) => {
     setTag(sceneName);
