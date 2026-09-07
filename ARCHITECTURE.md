@@ -23,7 +23,7 @@ ark/
 │  │  │  ├─ data/mock.ts     # 静态类型 + 示例数据（当前为 mock，后接 API）
 │  │  │  └─ pages/           # 页面组件（Home/Task/Chat/Experts/Skills/Prompts/Automation/Settings/Workspace/Site/Connectors）
 │  │  └─ index.html
-│  ├─ desktop/           # 桌面版前端（Tauri 2）· 规划中，复用 frontend 界面
+│  ├─ desktop/           # 桌面版（Tauri 2）· 复用 frontend 界面 ✅ 已实现
 │  └─ backend/           # 后端 API / Agent 编排 · 规划中
 ├─ docs/                  # 全部规格 / 计划 / 日志文档（本地，不提交）
 ├─ screenshots/           # 界面效果展示图（README 引用）
@@ -34,7 +34,7 @@ ark/
 └─ .gitignore
 ```
 
-> 说明：当前仅落地 `apps/frontend`。每个 app 独立包管理，暂不需要 PNPM/Turborepo 等 monorepo 工具。
+> 说明：已落地 `apps/frontend`（Web 前端）与 `apps/desktop`（Tauri 2 桌面版，复用 frontend 界面）。每个 app 独立包管理，暂不需要 PNPM/Turborepo 等 monorepo 工具。
 
 ## 三、技术栈（apps/frontend）
 

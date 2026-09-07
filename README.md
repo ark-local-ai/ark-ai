@@ -8,14 +8,14 @@
 ```
 apps/
   frontend/        # Web 前端（React+TS+Vite）：官网 + 工作台 ✅ 已实现
-  desktop/         # 桌面版前端（Tauri 2）· 复用 frontend 界面与布局 · 规划中
+  desktop/         # 桌面版（Tauri 2）· 复用 frontend 界面与布局 ✅ 已实现
   backend/         # 后端 API / Agent 编排 · 规划中
 docs/              # 内部文档（本地，不提交到仓库）
 ARCHITECTURE.md    # 架构文档
 CONTRIBUTING.md    # 贡献指南 / 提交规范
 ```
 
-> 说明：当前已实现 `apps/frontend`（Web 版）。桌面版前端（Tauri）与后端（Agent 编排）暂未落地，规划中——后续目录见上。
+> 说明：Web 版 `apps/frontend` 与桌面版 `apps/desktop`（Tauri 2，复用同一套界面）均已实现；后端（Agent 编排）规划中。
 
 ## 界面预览
 
@@ -33,8 +33,19 @@ npm run dev        # 开发，http://localhost:5173 （/ 官网 · /app 工作�
 npm run build      # 生产构建 dist/
 ```
 
+## 快速开始（桌面版，Windows）
+```bash
+cd apps/desktop
+npm install
+npm run desktop:dev    # 开发模式：拉起桌面窗口（复用 frontend 界面）
+npm run desktop:build  # 打包：可执行文件 + 安装包
+```
+
+> 桌面版说明：需 Rust（GNU/MSVC 工具链）与 WebView2 运行时（Win10/11 已内置）。界面与 Web 版 1:1 复用，无边框自绘标题栏。详见 `apps/desktop/README.md`。
+
 ## 当前进度（摘要）
 - ✅ 前端：官网落地页 + 客户端全页面路由打通（mock 数据）
+- ✅ 桌面版：Tauri 2 打包本机应用，复用 Web 界面
 - 📍 下一步：接真实后端 + LLM
 - 🤝 参与开发：见 [CONTRIBUTING.md]
 

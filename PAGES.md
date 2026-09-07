@@ -41,12 +41,25 @@
 | 自动化 Cron 调度 + 执行 | /app/automation | 当前 mock 列表，待接定时调度 | 🔲 |
 | 工作空间真目录扫描 + 下载 | /app/workspace | 当前 mock 文件树，待接本机磁盘 | 🔲 |
 | 登录 / 账号页 | 客户端工作台 | 侧栏现为本地用户「超级管理员 · 本地工作区」，多用户/登录体系未做 | 🔲 |
-| 桌面版前端（Tauri 2） | 桌面应用 | 复用现有界面，打包为本机应用 | 🔲 |
 | 后端 API / Agent 编排 | `apps/backend` | Agent 编排、任务调度、模型路由 | 🔲 |
 | 移动端远程 / IM 桥 | 能力 | 微信 / 飞书 / QQ / 企业微信接入（官网已宣传，落地未做） | 🔲 |
 
-## 三、说明
+桌面版前端已实现（见下方「五、桌面版前端」），故从待开发清单移除。
 
+## 三、说明
 - 当前所有页面数据来自 `src/data/mock.ts`，未接真实 API。
 - 接口与模块坑位见 `ARCHITECTURE.md` 第五节「核心模块」。
-- 目录结构：Web 前端 `apps/frontend`；桌面版与后端规划中，分别占 `apps/desktop`、`apps/backend`。
+- 目录结构：Web 前端 `apps/frontend`；桌面版 `apps/desktop` 已实现（Tauri 2，复用 frontend 界面）；后端 `apps/backend` 规划中。
+
+## 五、桌面版前端（`apps/desktop`）
+
+> 桌面应用（Tauri 2），复用 `apps/frontend` 的整套界面与布局，打包为本机 Windows 应用。✅ 已实现
+
+| 项 | 说明 |
+|---|---|
+| 技术栈 | Tauri 2（Rust 壳） + React 19 + TS + Vite，复用 frontend 界面 |
+| 复用方式 | 跨包相对导入 `../frontend/src/*`，前端零代码重复、不改动 frontend |
+| 路由 | `HashRouter`（桌面无服务器，BrowserRouter 在自定义协议下不可用），默认落 `/app` 工作台 |
+| 桌面特性 | 无边框窗口 + 自绘标题栏（拖拽 / 最小化 / 最大化 / 关闭）、应用图标、独立可运行 exe |
+| 运行 | `cd apps/desktop && npm install && npm run desktop:dev` |
+| 打包 | `npm run desktop:build` → `src-tauri/target/release/` 产出可执行文件与安装包 |

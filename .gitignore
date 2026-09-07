@@ -10,6 +10,9 @@ dist/
 # 运行期生成（任务交付物/后端本地数据，不提交）
 apps/frontend/public/workspace/
 apps/backend/data/
+# Rust (Tauri) 编译产物
+**/src-tauri/target/
+**/src-tauri/gen/schemas/
 
 # 环境/本地
 .env
