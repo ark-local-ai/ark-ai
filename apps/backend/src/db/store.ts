@@ -138,3 +138,17 @@ export function getTask(id: string): Task | null {
     created: row.created,
   };
 }
+
+export interface TaskSummary {
+  id: string;
+  title: string;
+  created: string;
+  status: TaskStatus;
+}
+
+/** 任务列表摘要（供侧栏「最近任务」），按创建时间倒序 */
+export function listTasks(limit = 50): TaskSummary[] {
+  const rows = db.prepare(`SELECT id, title, created, status FROM tasks ORDER BY created DESC LIMIT ?`)
+    .all(limit) as { id: string; title: string; created: string; status: TaskStatus }[];
+  return rows.map((r) => ({ id: r.id, title: r.title, created: r.created, status: r.status }));
+}

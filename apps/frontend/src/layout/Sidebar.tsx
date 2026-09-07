@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   IconAssistant, IconChevD, IconChevD2, IconChevU2, IconClock, IconDoc,
@@ -6,7 +6,8 @@ import {
   IconShare, IconRename, IconDots, IconSpark, IconTrash, IconUsers,
   ArkLogo, IconCollapse,
 } from "../components/icons";
-import { recentTasks, spaces } from "../data/mock";
+import { recentTasks as mockRecentTasks, spaces } from "../data/mock";
+import { listTasks } from "../api";
 
 type Mode = "task" | "space";
 
@@ -35,7 +36,12 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const [delTarget, setDelTarget] = useState<null | { kind: "task" | "space"; id: string }>(null);
   const [ctxMenu, setCtxMenu] = useState<null | { kind: "task" | "space"; id: string; x: number; y: number; title: string }>(null);
 
-  const [tasks, setTasks] = useState(recentTasks);
+  const [tasks, setTasks] = useState(mockRecentTasks);
+  useEffect(() => {
+    listTasks()
+      .then((ts) => setTasks(ts.map((t) => ({ id: t.id, title: t.title, time: t.created, space: null as string | null }))))
+      .catch(() => {});
+  }, []);
   const [spaceList, setSpaceList] = useState(spaces.filter((s) => s.name !== "默认工作空间"));
 
   const kw = q.trim().toLowerCase();

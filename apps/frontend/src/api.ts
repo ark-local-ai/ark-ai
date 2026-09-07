@@ -326,3 +326,11 @@ export async function listScenarios(): Promise<ScenarioDto[]> {
   if (!res.ok) throw new Error(`获取场景失败: ${res.status}`);
   return res.json();
 }
+
+export interface RecentTaskDto { id: string; title: string; created: string; status: string; }
+
+export async function listTasks(): Promise<RecentTaskDto[]> {
+  const res = await fetch(`${BASE}/api/tasks`);
+  if (!res.ok) throw new Error(`获取任务列表失败: ${res.status}`);
+  return res.json();
+}
