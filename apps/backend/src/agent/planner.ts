@@ -2,7 +2,7 @@
 // 输入需求 → 有序步骤数组。优先用已配置的 LLM 拆真步骤；
 // 无渠道 / 调用失败时，降级到内建脚本计划器（按场景关键词），保证开箱可跑。
 
-import { getDefaultChannel } from "../config/channels";
+import { pickChannel, recordSuccess, recordFailure } from "../models/router";
 import { chat } from "../models/client";
 
 export interface PlannedStep {
@@ -70,20 +70,26 @@ function scriptedPlan(prompt: string): PlannedStep[] {
 
 // ---- LLM 拆解（JSON 输出，失败即抛 → 上层 catch 降级）----
 async function llmPlan(prompt: string): Promise<PlannedStep[]> {
-  const ch = getDefaultChannel();
+  const ch = pickChannel();
   if (!ch) throw new Error("未配置模型渠道");
   const sys =
     "你是任务规划器。把用户的一句话需求拆成3~6个有序执行步骤。严格只输出 JSON 数组，每项 {\"title\":\"步骤标题\",\"note\":\"该步要做什么或产出什么\"}，不要输出其它文字。";
-  const raw = await chat(ch, [
-    { role: "system", content: sys },
-    { role: "user", content: prompt },
-  ]);
-  const arr = JSON.parse(raw) as { title?: string; note?: string }[];
-  if (!Array.isArray(arr) || !arr.length) throw new Error("LLM 未返回有效步骤");
-  return arr
-    .filter((s) => typeof s?.title === "string" && s.title.trim())
-    .slice(0, 6)
-    .map((s) => ({ title: s.title!.trim(), note: s.note?.trim() }));
+  try {
+    const raw = await chat(ch, [
+      { role: "system", content: sys },
+      { role: "user", content: prompt },
+    ]);
+    const arr = JSON.parse(raw) as { title?: string; note?: string }[];
+    if (!Array.isArray(arr) || !arr.length) throw new Error("LLM 未返回有效步骤");
+    recordSuccess(ch.id);
+    return arr
+      .filter((s) => typeof s?.title === "string" && s.title.trim())
+      .slice(0, 6)
+      .map((s) => ({ title: s.title!.trim(), note: s.note?.trim() }));
+  } catch (e) {
+    recordFailure(ch.id); // 记录失败，router 下次优选更稳渠道
+    throw e;
+  }
 }
 
 /** 主入口：优先 LLM，失败降级脚本。暴露 usedFallback 供编排层标记模型。 */

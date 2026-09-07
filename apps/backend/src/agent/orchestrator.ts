@@ -8,6 +8,7 @@ import {
 import { publish } from "./events";
 import { planTask } from "./planner";
 import { genOffice } from "../tools/office";
+import { verifyWithRetry } from "./verifier";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -82,8 +83,8 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
     await sleep(900); // 模拟执行耗时
 
     if (stepIdx === plan.length - 1) {
-      // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word）
-      const { name, kind } = await genOffice(prompt, plan, workDir);
+      // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word），带验收重试（最多 3 次）
+      const { name, kind } = await verifyWithRetry(() => genOffice(prompt, plan, workDir), 3);
       const deliver: Artifact = { name, kind, note: "Ark 生成 · 可编辑 Office 文件", path: name };
       insertArtifact(deliver, id, 1);
       task.deliverable = deliver;
