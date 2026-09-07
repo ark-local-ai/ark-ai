@@ -1,44 +1,77 @@
-import { useState } from "react";
-import { sampleTask } from "../data/mock";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { IconCheck } from "../components/icons";
-import { ftColor, ftLabel, type Task } from "../data/mock";
+import { ftColor, ftLabel } from "../data/mock";
+import { getTask, subscribeTask, workspaceUrl, type TaskDto } from "../api";
 
 export default function TaskPage() {
-  const [task, setTask] = useState<Task>(sampleTask);
-  const [running, setRunning] = useState(false);
+  const [params] = useSearchParams();
+  const taskId = params.get("taskId");
+  const [task, setTask] = useState<TaskDto | null>(null);
+  const [missing, setMissing] = useState(false);
+  const taskRef = useRef(task);
+  taskRef.current = task;
 
-  const start = () => {
-    if (running) return;
-    setRunning(true);
-    const tick = () => {
-      setTask((t) => {
-        const idx = t.steps.findIndex((s) => s.status === "run");
-        if (idx < 0) { setRunning(false); return t; }
-        const steps = t.steps.map((s, i) =>
-          i === idx ? { ...s, status: "done" as const }
-          : i === idx + 1 ? { ...s, status: "run" as const } : s);
-        const done = idx + 1 >= t.steps.length;
-        return {
-          ...t,
-          steps,
-          status: done ? "done" : "run",
-          checks: t.checks.map((c, i) => (i === 2 ? { ...c, ok: done } : c)),
-        };
-      });
-    };
-    tick();
-    const int = setInterval(() => {
-      setTask((t) => {
-        const stillRun = t.steps.some((s) => s.status === "run");
-        if (!stillRun) { clearInterval(int); setRunning(false); return t; }
-        return t;
-      });
-      setTimeout(tick, 0);
-    }, 800);
-  };
+  // 拉取任务快照
+  useEffect(() => {
+    if (!taskId) return;
+    setMissing(false);
+    getTask(taskId)
+      .then(setTask)
+      .catch(() => setMissing(true));
+  }, [taskId]);
 
-  const badge = task.status === "done" ? <span className="badge done">已完成</span>
-    : task.status === "run" ? <span className="badge run">执行中</span>
+  // 订阅 SSE 实时进度
+  useEffect(() => {
+    if (!taskId) return;
+    const unsub = subscribeTask(taskId, (ev) => {
+      const cur = taskRef.current;
+      if (!cur) return;
+      const next = { ...cur, steps: [...cur.steps] };
+      if (ev.type === "plan") {
+        next.steps = (ev.data as TaskDto["steps"]).map((s, i) => ({
+          ...(cur.steps[i] ?? { id: 0 }), ...s,
+        }));
+      } else if (ev.type === "step") {
+        const d = ev.data as { stepId: number; status: string };
+        const st = next.steps.find((s) => s.id === d.stepId)
+          ?? next.steps.find((s) => s.status === "running");
+        if (st) st.status = d.status as TaskDto["steps"][0]["status"];
+      } else if (ev.type === "deliver") {
+        next.deliverable = ev.data as TaskDto["deliverable"];
+      } else if (ev.type === "check") {
+        const checks = ev.data as TaskDto["checks"];
+        next.checks = checks;
+        if (checks.every((c) => c.ok)) next.status = "done";
+      } else if (ev.type === "done") {
+        next.status = "done";
+      }
+      setTask(next);
+    });
+    return unsub;
+  }, [taskId]);
+
+  if (missing) {
+    return (
+      <div className="page">
+        <div className="empty" style={{ height: 300 }}>
+          任务不存在或后端未启动
+        </div>
+      </div>
+    );
+  }
+  if (!task) {
+    return (
+      <div className="page">
+        <div className="empty" style={{ height: 300 }}>加载中…</div>
+      </div>
+    );
+  }
+
+  const badge =
+    task.status === "done" ? <span className="badge done">已完成</span>
+    : task.status === "running" ? <span className="badge run">执行中</span>
+    : task.status === "failed" ? <span className="badge warn">失败</span>
     : <span className="badge queue">排队中</span>;
 
   return (
@@ -49,45 +82,41 @@ export default function TaskPage() {
             <div className="t-h"><b>{task.title}</b>{badge}</div>
             <div className="prompt-bar"><span>{task.prompt}</span></div>
             <ul className="steps">
-              {task.steps.map((s, i) => {
+              {task.steps.map((s) => {
                 const cls = s.status;
-                const dot = cls === "done" ? "✓" : cls === "run" ? "" : String(i + 1);
+                const dot = cls === "done" ? "✓" : cls === "running" ? "" : "";
                 return (
-                  <li key={i} className={`step ${cls === "run" ? "cur" : ""}`}>
-                    <span className={`dot ${cls}`}>{dot}</span>
+                  <li key={s.id} className={`step ${cls === "running" ? "cur" : ""}`}>
+                    <span className={`dot ${cls === "done" ? "done" : cls === "running" ? "run" : "wait"}`}>
+                      {cls === "running" ? "●" : dot}
+                    </span>
                     <span className="txt">{s.title}</span>
-                    <span className="sub">{cls === "done" ? "已完成" : cls === "run" ? "执行中" : "待执行"}</span>
+                    <span className="sub">
+                      {cls === "done" ? "已完成" : cls === "running" ? "执行中" : "待执行"}
+                    </span>
                   </li>
                 );
               })}
             </ul>
           </div>
 
-          {task.artifacts.length > 0 && (
+          {task.deliverable && (
             <div className="tcard">
-              <div className="t-h"><b>中间产物</b></div>
-              {task.artifacts.map((a, i) => (
-                <div className="file" key={i}>
-                  <div className="ftext" style={{ background: ftColor[a.kind] }}>{ftLabel(a.kind)}</div>
-                  <div><div className="fn">{a.name}</div><div className="fm">{a.note}</div></div>
-                  <button className="btn ghost sm">打开</button>
+              <div className="t-h"><b>交付成果</b></div>
+              <div className="file deliver">
+                <div className="ftext" style={{ background: ftColor[task.deliverable.kind] }}>
+                  {ftLabel(task.deliverable.kind)}
                 </div>
-              ))}
+                <div>
+                  <div className="fn">{task.deliverable.name}</div>
+                  <div className="fm">{task.deliverable.note}</div>
+                </div>
+                <a className="btn primary sm" href={workspaceUrl(task.deliverable.name)} download>
+                  下载
+                </a>
+              </div>
             </div>
           )}
-
-          <div className="tcard">
-            <div className="t-h"><b>交付成果</b></div>
-            {task.deliverable && (
-              <div className="file deliver">
-                <div className="ftext" style={{ background: ftColor[task.deliverable.kind] }}>{ftLabel(task.deliverable.kind)}</div>
-                <div><div className="fn">{task.deliverable.name}</div><div className="fm">{task.deliverable.note}</div></div>
-                <button className="btn primary sm" onClick={start} disabled={running}>
-                  {running ? "执行中…" : "下载"}
-                </button>
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="rail">

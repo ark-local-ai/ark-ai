@@ -7,6 +7,10 @@ dist/
 **/dist/
 *.tsbuildinfo
 
+# 运行期生成（任务交付物/后端本地数据，不提交）
+apps/frontend/public/workspace/
+apps/backend/data/
+
 # 环境/本地
 .env
 .env.local
