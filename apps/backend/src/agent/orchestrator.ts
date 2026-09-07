@@ -25,9 +25,9 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
   const created = new Date().toLocaleString("zh-CN", { hour12: false });
 
   // 规划：优先 LLM 拆真步骤，失败降级脚本
-  const { steps: planned, viaLLM } = await planTask(prompt);
+  const { steps: planned, model } = await planTask(prompt);
   const plan = planned.map((p) => p.title);
-  const modelUsed = viaLLM ? "LLM" : "内置计划器";
+  const modelUsed = model;
 
   const task: Task = {
     id, title, prompt, status: "queue", model: modelUsed, expert: "数据分析师",
