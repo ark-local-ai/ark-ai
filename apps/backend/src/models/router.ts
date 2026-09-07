@@ -66,7 +66,7 @@ export function pickChannel(): Channel | null {
 
 /** 返回全部渠道的成功率统计（供 /api/channels） */
 export function getChannelStats(): {
-  id: string; name: string; model: string; proto: string;
+  id: string; name: string; model: string; proto: string; baseUrl: string;
   ok: number; fail: number; rate: number; default?: boolean;
 }[] {
   return getChannels().map((c) => {
@@ -77,6 +77,7 @@ export function getChannelStats(): {
       name: c.name,
       model: c.model,
       proto: c.proto,
+      baseUrl: c.baseUrl,
       ok: s.ok,
       fail: s.fail,
       rate: total === 0 ? 0 : Math.round((s.ok / total) * 100),

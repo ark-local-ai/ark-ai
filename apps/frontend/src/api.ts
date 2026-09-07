@@ -247,3 +247,54 @@ export async function listJobLogs(): Promise<JobLogDto[]> {
   if (!res.ok) throw new Error(`获取执行历史失败: ${res.status}`);
   return res.json();
 }
+export interface ChannelDto {
+  id: string;
+  name: string;
+  proto: "openai" | "anthropic";
+  model: string;
+  baseUrl?: string;
+  apiKey?: string;
+  default?: boolean;
+  ok?: number;
+  fail?: number;
+  rate?: number;
+}
+
+export async function listChannels(): Promise<ChannelDto[]> {
+  const res = await fetch(`${BASE}/api/channels`);
+  if (!res.ok) throw new Error(`获取渠道失败: ${res.status}`);
+  return res.json();
+}
+
+export async function createChannel(p: { name: string; proto: "openai" | "anthropic"; model: string; baseUrl: string; apiKey?: string }): Promise<ChannelDto> {
+  const res = await fetch(`${BASE}/api/channels`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(p),
+  });
+  if (!res.ok) throw new Error(`新增渠道失败: ${res.status}`);
+  return res.json();
+}
+
+export async function updateChannel(id: string, body: Partial<ChannelDto>): Promise<ChannelDto> {
+  const res = await fetch(`${BASE}/api/channels/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`更新渠道失败: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteChannel(id: string): Promise<void> {
+  await fetch(`${BASE}/api/channels/${id}`, { method: "DELETE" });
+}
+
+export async function setDefaultChannel(id: string): Promise<void> {
+  await fetch(`${BASE}/api/channels/${id}/default`, { method: "POST" });
+}
+
+export async function testChannel(id: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE}/api/channels/${id}/test`, { method: "POST" });
+  return res.json();
+}
