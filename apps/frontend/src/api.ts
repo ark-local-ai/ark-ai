@@ -71,3 +71,69 @@ export async function listWorkspace(): Promise<WorkspaceFileDto[]> {
   if (!res.ok) throw new Error(`获取工作空间失败: ${res.status}`);
   return res.json();
 }
+
+export interface ChatMsg {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * 发送对话，返回 SSE 流式回复（fetch stream 解析 token）。
+ * onToken 每次收到文本增量调用；onDone 流结束（带完整回复文本）；onError 连接异常。
+ * 返回取消函数。
+ */
+export function sendChat(
+  message: string,
+  history: ChatMsg[],
+  onToken: (t: string) => void,
+  onDone?: (full: string) => void,
+  onError?: (err: unknown) => void,
+): () => void {
+  const ctrl = new AbortController();
+  let closed = false;
+
+  (async () => {
+    let full = "";
+    try {
+      const res = await fetch(`${BASE}/api/chat`, {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ message, history }),
+      });
+      if (!res.ok || !res.body) throw new Error(`chat ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (!closed) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const frames = buf.split("\n\n");
+        buf = frames.pop() ?? "";
+        for (const frame of frames) {
+          let eventType = "message";
+          let dataStr = "";
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event:")) eventType = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+          }
+          if (!dataStr) continue;
+          const data = JSON.parse(dataStr) as { text?: string };
+          if (eventType === "token" && data.text) {
+            full += data.text;
+            onToken(data.text);
+          }
+        }
+      }
+      if (!closed) onDone?.(full);
+    } catch (err) {
+      if (!closed && onError) onError(err);
+    }
+  })();
+
+  return () => {
+    closed = true;
+    ctrl.abort();
+  };
+}

@@ -5,6 +5,7 @@ import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { taskRoutes } from "./routes/tasks.js";
 import { channelRoutes } from "./routes/channels.js";
+import { chatRoutes } from "./routes/chat.js";
 import { scanWorkspace } from "./tools/workspace.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -18,6 +19,7 @@ export async function buildApp() {
   // API 路由
   app.register(taskRoutes, { prefix: "/api/tasks" });
   app.register(channelRoutes, { prefix: "/api/channels" });
+  app.register(chatRoutes, { prefix: "/api/chat" });
 
   // 工作空间列表（真目录扫描）
   app.get("/api/workspace", async () => {
