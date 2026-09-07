@@ -21,7 +21,7 @@ CONTRIBUTING.md    # 贡献指南 / 提交规范
 
 > 效果图基于当前 Web 版前端（`apps/frontend`）实拍；桌面版（Tauri）复用同一套界面与布局。
 
-| 官网落地页 | 工作台（新会话） |
+| 官网落地页 | 工作台 |
 |---|---|
 | ![官网落地页](screenshots/site-landing.png) | ![工作台首页](screenshots/workbench-home.png) |
 
