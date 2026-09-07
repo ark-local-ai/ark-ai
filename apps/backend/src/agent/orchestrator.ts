@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Task, TaskStep, Artifact } from "../types";
 import {
@@ -7,6 +7,7 @@ import {
 } from "../db/store";
 import { publish } from "./events";
 import { planTask } from "./planner";
+import { genOffice } from "../tools/office";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -81,12 +82,9 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
     await sleep(900); // 模拟执行耗时
 
     if (stepIdx === plan.length - 1) {
-      // 最后一步行：生成真实交付文件
-      const fileName = `${title}-${id}.md`;
-      const content = `# ${title}\n\n> 需求：${prompt}\n\n## 生成时间\n${new Date().toLocaleString("zh-CN", { hour12: false })}\n\n## 规划步骤\n${plan.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n\n## 说明\n这是一份由 Ark 编排层生成的成果文件（${modelUsed} 拆解计划后产出，可编辑）。\n`;
-      writeFileSync(join(workDir, fileName), content, "utf8");
-
-      const deliver: Artifact = { name: fileName, kind: "md", note: "Ark 生成成果文件 · 可编辑", path: fileName };
+      // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word）
+      const { name, kind } = await genOffice(prompt, plan, workDir);
+      const deliver: Artifact = { name, kind, note: "Ark 生成 · 可编辑 Office 文件", path: name };
       insertArtifact(deliver, id, 1);
       task.deliverable = deliver;
       publish({ type: "deliver", taskId: id, data: deliver });
