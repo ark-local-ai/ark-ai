@@ -36,15 +36,28 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-left: 14px;
+  padding-left: 10px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   user-select: none;
   -webkit-user-select: none;
 }
+.tb-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out);
+}
+.tb-brand:hover { background: var(--surface-2); color: var(--text-1); }
+.tb-brand:active { background: var(--surface-3); }
 .tb-title {
   font-size: var(--fs-xs);
-  color: var(--text-2);
   letter-spacing: 0.02em;
 }
 .tb-controls {
@@ -66,3 +79,40 @@
 .tb-btn:active { background: var(--surface-3); }
 .tb-close:hover { background: var(--danger); color: #fff; }
 .tb-close:active { background: var(--danger); color: #fff; opacity: 0.85; }
+
+/* ---------------- 关于对话框 ---------------- */
+.tb-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 40, 32, 0.28);
+  z-index: 200;
+}
+.tb-about {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100vw - 40px));
+  padding: 22px 24px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tb-about-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tb-about-head > div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.tb-about-head b { font-size: var(--fs-h); color: var(--text-1); }
+.tb-about-head span { font-size: var(--fs-2xs); color: var(--text-3); }
+.tb-about p { font-size: var(--fs-sm); color: var(--text-2); line-height: var(--lh-body); margin: 0; }
+.tb-about p.tb-about-meta { font-size: var(--fs-xs); color: var(--text-3); }
+.tb-about .btn { align-self: flex-end; }
