@@ -1,6 +1,7 @@
-import { experts } from "../data/mock";
+import { useEffect, useState } from "react";
 import { useLocation, NavLink, useNavigate } from "react-router-dom";
 import { IconUsers, IconSpark, IconLink } from "../components/icons";
+import { listExperts, type ExpertDto } from "../api";
 
 const TABS = [
   { to: "/app/experts", label: "专家", icon: <IconUsers size={14} />, desc: "内置专家与技能库 —— 按专业流程拆解任务、逐项执行。交付可验收的成果，而不是聊天记录。" },
@@ -12,6 +13,13 @@ export default function Experts() {
   const nav = useNavigate();
   const loc = useLocation();
   const active = TABS.find((t) => t.to === loc.pathname) ?? TABS[0];
+  const [experts, setExperts] = useState<ExpertDto[]>([]);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    listExperts().then(setExperts).catch(() => setErr(true));
+  }, []);
+
   return (
     <div className="page">
       <header className="pn-hd">
@@ -25,6 +33,7 @@ export default function Experts() {
         </nav>
         <p className="pn-desc">{active.desc}</p>
       </header>
+      {err && <div style={{ fontSize: 12, color: "var(--warn)", padding: 12 }}>后端未启动，专家列表读不到</div>}
       <div className="ex-grid">
         {experts.map((e) => (
           <div key={e.id} className="ex-card card" onClick={() => nav("/")}>
@@ -52,3 +61,4 @@ export default function Experts() {
     </div>
   );
 }
+
