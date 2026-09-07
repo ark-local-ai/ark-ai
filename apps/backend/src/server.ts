@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { taskRoutes } from "./routes/tasks.js";
 import { channelRoutes } from "./routes/channels.js";
 import { chatRoutes } from "./routes/chat.js";
+import { skillRoutes } from "./routes/skills.js";
+import { expertRoutes } from "./routes/experts.js";
 import { scanWorkspace } from "./tools/workspace.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -20,6 +22,8 @@ export async function buildApp() {
   app.register(taskRoutes, { prefix: "/api/tasks" });
   app.register(channelRoutes, { prefix: "/api/channels" });
   app.register(chatRoutes, { prefix: "/api/chat" });
+  app.register(skillRoutes, { prefix: "/api/skills" });
+  app.register(expertRoutes, { prefix: "/api/experts" });
 
   // 工作空间列表（真目录扫描）
   app.get("/api/workspace", async () => {

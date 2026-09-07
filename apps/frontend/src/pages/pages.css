@@ -91,6 +91,7 @@
 .code-pane .cp-h { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px; border-bottom: 1px solid var(--line); }
 .code-pane .cp-h b { font-size: 13.5px; font-family: ui-monospace, Consolas, monospace; }
 .code-area { background: #f8f9fb; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.7; padding: 16px 18px; white-space: pre-wrap; color: #37414f; min-height: 320px; }
+.code-area.code-edit { display: block; width: 100%; border: 0; outline: none; resize: vertical; }
 .conn-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
 .conn-row:last-child { border-bottom: none; }
 .conn-row .cdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }

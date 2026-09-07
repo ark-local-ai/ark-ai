@@ -137,3 +137,54 @@ export function sendChat(
     ctrl.abort();
   };
 }
+
+export interface SkillDto {
+  id: string;
+  name: string;
+  desc: string;
+  enabled: boolean;
+  code: string;
+}
+
+export async function listSkills(): Promise<SkillDto[]> {
+  const res = await fetch(`${BASE}/api/skills`);
+  if (!res.ok) throw new Error(`获取技能失败: ${res.status}`);
+  return res.json();
+}
+
+export async function getSkill(id: string): Promise<SkillDto> {
+  const res = await fetch(`${BASE}/api/skills/${id}`);
+  if (!res.ok) throw new Error(`获取技能失败: ${res.status}`);
+  return res.json();
+}
+
+export async function saveSkill(id: string, body: Partial<SkillDto>): Promise<SkillDto> {
+  const res = await fetch(`${BASE}/api/skills/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`保存技能失败: ${res.status}`);
+  return res.json();
+}
+
+export async function toggleSkill(id: string, enabled: boolean): Promise<SkillDto> {
+  return saveSkill(id, { enabled });
+}
+
+export interface ExpertDto {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  desc: string;
+  skills: string;
+  connectors: string;
+  builtin: boolean;
+}
+
+export async function listExperts(): Promise<ExpertDto[]> {
+  const res = await fetch(`${BASE}/api/experts`);
+  if (!res.ok) throw new Error(`获取专家失败: ${res.status}`);
+  return res.json();
+}
