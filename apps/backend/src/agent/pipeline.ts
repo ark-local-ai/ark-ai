@@ -8,13 +8,11 @@
 // 无渠道 / 失败 / 超时自动回退到各自确定性的内置逻辑，保证开箱可跑。
 // 三者相对独立——一个失败不影响后续 Agent 继续尝试（鲁棒）。
 
-import { pickChannel, recordSuccess, recordFailure } from "../models/router";
-import { chat, type ChatMessage } from "../models/client";
+import { chatWithFailover } from "../models/router";
 import { defaultTool, type ToolInput } from "../tools/registry";
 import type { StepContent } from "./../tools/office";
 
 const TIMEOUT_MS = 20000;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -24,18 +22,21 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-/** 当前的模型渠道（无则 null） */
-function channel(): ReturnType<typeof pickChannel> {
-  return pickChannel();
-}
-
-/** 调模型，system+user，返回文本；失败或超时抛错由调用方降级 */
-async function llmCall(ch: NonNullable<ReturnType<typeof pickChannel>>, sys: string, user: string): Promise<string> {
-  const messages: ChatMessage[] = [
-    { role: "system", content: sys },
-    { role: "user", content: user },
-  ];
-  return withTimeout(chat(ch, messages, { temperature: 0.5, maxTokens: 1500 }), TIMEOUT_MS);
+/**
+ * 调模型，system+user，返回文本；内部走多渠道 failover（按成功率逐个尝试，
+ * 每次成功/失败自动记统计）。全渠道失败抛错，由各 Agent 自行降级脚本。
+ */
+async function llmCall(sys: string, user: string): Promise<string> {
+  return withTimeout(
+    chatWithFailover(
+      [
+        { role: "system", content: sys },
+        { role: "user", content: user },
+      ],
+      { temperature: 0.5, maxTokens: 1500 },
+    ).then((r) => r.text),
+    TIMEOUT_MS,
+  );
 }
 
 export interface PipelineResult {
@@ -46,10 +47,8 @@ export interface PipelineResult {
 
 // ---------------- 分析师：提炼关键要点 ----------------
 async function analyst(prompt: string, plan: string[], kind: string): Promise<{ points: string[]; viaLLM: boolean }> {
-  const ch = channel();
-  if (!ch) return { points: keywordPoints(prompt, plan), viaLLM: false };
   try {
-    const raw = await llmCall(ch,
+    const raw = await llmCall(
       "你是首席分析师。根据用户需求与执行计划，提炼 3~5 条最关键的观点/要点。严格只输出 JSON 数组，每项为字符串，不要其它文字。",
       `需求：${prompt}\n执行计划：\n${plan.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n交付类型：${kind}`,
     );
@@ -61,10 +60,8 @@ async function analyst(prompt: string, plan: string[], kind: string): Promise<{ 
       if (points.length >= 6) break;
     }
     if (!points.length) throw new Error("分析师要点为空");
-    recordSuccess(ch.id);
     return { points, viaLLM: true };
   } catch {
-    recordFailure(ch.id);
     return { points: keywordPoints(prompt, plan), viaLLM: false };
   }
 }
@@ -82,10 +79,8 @@ function keywordPoints(prompt: string, plan: string[]): string[] {
 async function writer(
   prompt: string, plan: string[], kind: string, points: string[],
 ): Promise<{ sections: StepContent[]; viaLLM: boolean }> {
-  const ch = channel();
-  if (!ch) return { sections: scripted(prompt, plan, kind as "ppt" | "xls" | "doc"), viaLLM: false };
   try {
-    const raw = await llmCall(ch,
+    const raw = await llmCall(
       "你是专业内容撰稿人。基于分析师要点，为交付文件生成正文，输出 JSON：{\"sections\":[{\"title\":\"步骤标题\",\"paragraphs\":[\"段落1\",\"段落2\"]}, ...]}。语言中文，正文具体专业可读。严格只输出 JSON。",
       `需求：${prompt}\n分析师要点：\n${points.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n交付类型：${kind}`,
     );
@@ -95,10 +90,8 @@ async function writer(
       .slice(0, 12)
       .map((s) => ({ title: s.title!.trim(), paragraphs: s.paragraphs!.map((p) => p.trim()).filter(Boolean) }));
     if (!sections.length) throw new Error("写手未返回有效 section");
-    recordSuccess(ch.id);
     return { sections, viaLLM: true };
   } catch {
-    recordFailure(ch.id);
     return { sections: scripted(prompt, plan, kind as "ppt" | "xls" | "doc"), viaLLM: false };
   }
 }
@@ -121,11 +114,9 @@ async function editor(
   if (cleaned.length === 0) {
     return { sections: [{ title: "内容概览", paragraphs: [`关于「${prompt.slice(0, 30)}」的说明。`] }], viaLLM: false };
   }
-  const ch = channel();
-  if (!ch) return { sections: cleaned, viaLLM: false };
   try {
-    const raw = await llmCall(ch,
-      "你是编辑/校对。对下面的交付内容做最终校验：修正明显错误、补一句“结论”到最后一个 section 的 paragraphs 末尾。保持原 JSON 结构 {\"sections\":[...]}，不要丢失内容，不要加标题之外的结构。严格只输出 JSON。",
+    const raw = await llmCall(
+      `你是编辑/校对。对下面的交付内容做最终校验：修正明显错误、补一句「结论」到最后一个 section 的 paragraphs 末尾。保持原 JSON 结构 {"sections":[...]}，不要丢失内容，不要加标题之外的结构。严格只输出 JSON。`,
       `需求：${prompt}\n交付类型：${kind}\n当前内容：\n${JSON.stringify(cleaned)}`,
     );
     const parsed = JSON.parse(raw) as { sections?: { title?: string; paragraphs?: string[] }[] };
@@ -133,10 +124,8 @@ async function editor(
       .filter((s) => s?.title && Array.isArray(s.paragraphs))
       .map((s) => ({ title: s.title!.trim(), paragraphs: s.paragraphs!.map((p) => p.trim()).filter(Boolean) }));
     if (!out.length) throw new Error("编辑输出为空");
-    recordSuccess(ch.id);
     return { sections: out, viaLLM: true };
   } catch {
-    recordFailure(ch.id);
     return { sections: cleaned, viaLLM: false };
   }
 }
