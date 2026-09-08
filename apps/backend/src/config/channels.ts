@@ -12,6 +12,10 @@ export interface Channel {
   baseUrl: string;
   apiKey?: string;
   default?: boolean;
+  /** 用户优先级 0-100，默认 50；越高越优先（路由加权用） */
+  priority?: number;
+  /** 每千 token 成本（约 $），默认 0=未设置；越低越优先，本地(Ollama)填 0 表示近乎免费 */
+  cost?: number;
 }
 
 db.exec(`
@@ -25,6 +29,15 @@ db.exec(`
     is_default INTEGER NOT NULL DEFAULT 0
   );
 `);
+
+// 迁移：旧库补 priority / cost 列（须在建表之后执行，全新库已在建表含列则跳过）
+const chCols = db.prepare(`PRAGMA table_info(channels)`).all() as { name: string }[];
+if (!chCols.some((c) => c.name === "priority")) {
+  db.exec(`ALTER TABLE channels ADD COLUMN priority INTEGER NOT NULL DEFAULT 50`);
+}
+if (!chCols.some((c) => c.name === "cost")) {
+  db.exec(`ALTER TABLE channels ADD COLUMN cost REAL NOT NULL DEFAULT 0`);
+}
 
 const BUILTIN: Omit<Channel, "id">[] = [
   { name: "DeepSeek", proto: "openai", model: "deepseek-chat", baseUrl: "https://api.deepseek.com/v1", apiKey: "" },
@@ -66,8 +79,8 @@ function seedFromEnv(): void {
 }
 
 function insertRow(c: Channel, isDefault: boolean): void {
-  db.prepare(`INSERT OR IGNORE INTO channels (id,name,proto,model,base_url,api_key,is_default) VALUES (?,?,?,?,?,?,?)`)
-    .run(c.id, c.name, c.proto, c.model, c.baseUrl, c.apiKey ?? null, isDefault ? 1 : 0);
+  db.prepare(`INSERT OR IGNORE INTO channels (id,name,proto,model,base_url,api_key,is_default,priority,cost) VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(c.id, c.name, c.proto, c.model, c.baseUrl, c.apiKey ?? null, isDefault ? 1 : 0, c.priority ?? 50, c.cost ?? 0);
 }
 
 // 确保至少有一次种子（表为空时）
@@ -76,26 +89,26 @@ function insertRow(c: Channel, isDefault: boolean): void {
   if (n === 0) seedFromEnv();
 })();
 
-function rowToChannel(r: {
-  id: string; name: string; proto: string; model: string; base_url: string; api_key: string | null; is_default: number;
-}): Channel {
+interface ChannelRow {
+  id: string; name: string; proto: string; model: string; base_url: string;
+  api_key: string | null; is_default: number; priority: number; cost: number;
+}
+
+function rowToChannel(r: ChannelRow): Channel {
   return {
     id: r.id, name: r.name, proto: r.proto === "anthropic" ? "anthropic" : "openai",
     model: r.model, baseUrl: r.base_url, apiKey: r.api_key ?? undefined, default: !!r.is_default,
+    priority: r.priority, cost: r.cost,
   };
 }
 
 export function getChannels(): Channel[] {
-  const rows = db.prepare(`SELECT * FROM channels ORDER BY is_default DESC, id`).all() as {
-    id: string; name: string; proto: string; model: string; base_url: string; api_key: string | null; is_default: number;
-  }[];
+  const rows = db.prepare(`SELECT * FROM channels ORDER BY is_default DESC, id`).all() as unknown as ChannelRow[];
   return rows.map(rowToChannel);
 }
 
 export function getChannelById(id: string): Channel | null {
-  const r = db.prepare(`SELECT * FROM channels WHERE id = ?`).get(id) as
-    | { id: string; name: string; proto: string; model: string; base_url: string; api_key: string | null; is_default: number }
-    | undefined;
+  const r = db.prepare(`SELECT * FROM channels WHERE id = ?`).get(id) as unknown as ChannelRow | undefined;
   return r ? rowToChannel(r) : null;
 }
 
@@ -115,8 +128,8 @@ export function updateChannel(id: string, patch: Partial<Omit<Channel, "id">>): 
   const cur = getChannelById(id);
   if (!cur) return null;
   const next = { ...cur, ...patch };
-  db.prepare(`UPDATE channels SET name=?, proto=?, model=?, base_url=?, api_key=?, is_default=? WHERE id=?`)
-    .run(next.name, next.proto, next.model, next.baseUrl, next.apiKey ?? null, next.default ? 1 : 0, id);
+  db.prepare(`UPDATE channels SET name=?, proto=?, model=?, base_url=?, api_key=?, is_default=?, priority=?, cost=? WHERE id=?`)
+    .run(next.name, next.proto, next.model, next.baseUrl, next.apiKey ?? null, next.default ? 1 : 0, next.priority ?? 50, next.cost ?? 0, id);
   return getChannelById(id)!;
 }
 
