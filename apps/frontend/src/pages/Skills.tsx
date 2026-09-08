@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, NavLink } from "react-router-dom";
-import { skills, connectors } from "../data/mock";
 import { IconUsers, IconSpark, IconLink } from "../components/icons";
+import { listSkills, getSkill, saveSkill, toggleSkill, type SkillDto } from "../api";
 
 const TABS = [
   { to: "/app/experts", label: "专家", icon: <IconUsers size={14} />, desc: "内置专家与技能库 —— 按专业流程拆解任务、逐项执行。交付可验收的成果，而不是聊天记录。" },
@@ -10,10 +10,54 @@ const TABS = [
 ];
 
 export default function Skills() {
-  const [selId, setSelId] = useState(skills[0].id);
-  const sel = skills.find((s) => s.id === selId)!;
   const loc = useLocation();
   const active = TABS.find((t) => t.to === loc.pathname) ?? TABS[1];
+
+  const [list, setList] = useState<SkillDto[]>([]);
+  const [selId, setSelId] = useState<string | null>(null);
+  const [sel, setSel] = useState<SkillDto | null>(null); // 编辑中的技能（含 code）
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    listSkills()
+      .then((ls) => {
+        setList(ls);
+        setSelId(ls[0]?.id ?? null);
+      })
+      .catch(() => setErr(true));
+  }, []);
+
+  useEffect(() => {
+    if (!selId) return;
+    getSkill(selId).then((s) => { setSel(s); setDirty(false); }).catch(() => setErr(true));
+  }, [selId]);
+
+  const select = (id: string) => {
+    if (dirty && !window.confirm("当前编辑未保存，切换将丢弃更改？")) return;
+    setSelId(id);
+  };
+
+  const onEdit = (code: string) => { setSel((s) => (s ? { ...s, code } : s)); setDirty(true); };
+
+  const save = async () => {
+    if (!sel) return;
+    setSaving(true);
+    try {
+      const updated = await saveSkill(sel.id, { name: sel.name, desc: sel.desc, enabled: sel.enabled, code: sel.code });
+      setSel(updated);
+      setDirty(false);
+      setList((ls) => ls.map((x) => (x.id === updated.id ? updated : x)));
+    } catch { /* ignore */ } finally { setSaving(false); }
+  };
+
+  const flip = async (s: SkillDto) => {
+    const updated = await toggleSkill(s.id, !s.enabled);
+    setList((ls) => ls.map((x) => (x.id === updated.id ? updated : x)));
+    if (sel?.id === updated.id) setSel(updated);
+  };
+
   return (
     <div className="page">
       <header className="pn-hd">
@@ -33,15 +77,17 @@ export default function Skills() {
             <b>技能库</b>
             <span style={{ fontSize: 11, color: "var(--text-3)" }}>Markdown 即技能 · 改完即生效</span>
           </div>
-          {skills.map((s) => (
+          {err && <div style={{ fontSize: 12, color: "var(--warn)", padding: 8 }}>后端未启动，技能读不到</div>}
+          {list.map((s) => (
             <div key={s.id}
               className={`skill-row${s.id === selId ? " sel" : ""}`}
-              onClick={() => setSelId(s.id)}>
+              onClick={() => select(s.id)}>
               <div>
                 <div className="s-name">{s.name}</div>
                 <div className="s-desc">{s.desc}</div>
               </div>
-              <div className={`switch${s.enabled ? " on" : ""}`} onClick={(e) => e.stopPropagation()} />
+              <div className={`switch${s.enabled ? " on" : ""}`}
+                onClick={(e) => { e.stopPropagation(); flip(s); }} />
             </div>
           ))}
         </div>
@@ -49,21 +95,25 @@ export default function Skills() {
         <div>
           <div className="code-pane">
             <div className="cp-h">
-              <b>{sel.name}.md</b>
-              <span className="badge done">已保存 ✓</span>
+              <b>{sel?.name ?? ""}.md</b>
+              {dirty ? <span className="badge run">未保存</span> : <span className="badge done">已保存 ✓</span>}
+              <button className="btn primary sm" style={{ marginLeft: "auto" }} onClick={save} disabled={saving || !dirty || !sel}>
+                {saving ? "保存中…" : "保存"}
+              </button>
             </div>
-            <pre className="code-area">{sel.code}</pre>
+            {sel && (
+              <textarea
+                className="code-area code-edit"
+                spellCheck={false}
+                value={sel.code}
+                onChange={(e) => onEdit(e.target.value)}
+              />
+            )}
           </div>
 
           <div className="card" style={{ padding: "16px 18px", marginTop: 18 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>连接器</div>
-            {connectors.map((c) => (
-              <div key={c.name} className="conn-row">
-                <span className="cdot" style={{ background: c.dot }} />
-                <span className="cname">{c.name}</span>
-                <span className="cnote">{c.note}</span>
-              </div>
-            ))}
+            <div style={{ fontSize: 12, color: "var(--text-3)" }}>连接器状态见「连接器」页（模型渠道/搜索/浏览器/IM 桥）。</div>
           </div>
         </div>
       </div>

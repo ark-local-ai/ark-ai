@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { IconSend } from "../components/icons";
+import { sendChat, type ChatMsg } from "../api";
 
 interface Msg { role: "user" | "ai"; text: string }
 
@@ -10,20 +11,49 @@ const INITIAL: Msg[] = [
 export default function Chat() {
   const [msgs, setMsgs] = useState<Msg[]>(INITIAL);
   const [v, setV] = useState("");
+  const [busy, setBusy] = useState(false);
+  const historyRef = useRef<ChatMsg[]>([]);
+
   const send = () => {
-    if (!v.trim()) return;
-    setMsgs((m) => [...m, { role: "user", text: v }]);
+    const text = v.trim();
+    if (!text || busy) return;
     setV("");
-    setTimeout(() => {
-      setMsgs((m) => [...m, { role: "ai", text: "收到，我会把这一步交给专家团队处理。你也可以到任务页查看执行进度。" }]);
-    }, 500);
+    historyRef.current.push({ role: "user", content: text });
+    setMsgs((m) => [...m, { role: "user", text }, { role: "ai", text: "" }]);
+    setBusy(true);
+
+    // 新 AI 气泡游标（此时 msgs 尚未加入两条，故旧长度 + 1）
+    const aiIndex = msgs.length + 1;
+    let acc = "";
+
+    sendChat(
+      text,
+      historyRef.current,
+      (t) => {
+        acc += t;
+        setMsgs((m) => {
+          const next = [...m];
+          next[aiIndex] = { role: "ai", text: next[aiIndex].text + t };
+          return next;
+        });
+      },
+      (full) => {
+        historyRef.current.push({ role: "assistant", content: full || acc });
+        setBusy(false);
+      },
+      () => setBusy(false),
+    );
   };
+
   return (
     <div className="page chat-page">
       <div className="chat-list" style={{ maxWidth: 760, margin: "0 auto" }}>
         {msgs.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
-            <div className="msg-bub">{m.text}</div>
+            <div className="msg-bub">
+              {m.text}
+              {busy && i === msgs.length - 1 && m.role === "ai" && <span className="caret" />}
+            </div>
           </div>
         ))}
       </div>
@@ -34,7 +64,7 @@ export default function Chat() {
         <div className="row">
           <span className="pill">＋</span>
           <span className="pill blue">DeepSeek ▾</span>
-          <button className="send" onClick={send}><IconSend /></button>
+          <button className="send" onClick={send} disabled={busy}><IconSend /></button>
         </div>
       </div>
     </div>
