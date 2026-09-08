@@ -421,3 +421,20 @@
 .sb-newspace input:focus { border-color: var(--brand); }
 .sb-newspace-ops { display: flex; gap: 6px; justify-content: flex-end; }
 .sb-grp.add-grp { margin-top: 2px; }
+
+/* ===== 本地登录/注册弹窗（M12）===== */
+.auth-modal {
+  position: fixed; inset: 0; margin: auto; z-index: 130;
+  width: min(320px, 88vw); height: fit-content;
+  padding: 20px; border-radius: var(--radius-lg, 16px);
+  background: var(--surface-1, #fff); border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg, 0 20px 50px rgba(0,0,0,.18));
+}
+.auth-input {
+  width: 100%; padding: 9px 11px; font-size: 13px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-1); outline: none;
+  box-sizing: border-box;
+}
+.auth-input:focus { border-color: var(--brand); }
+.auth-tabs button:disabled { opacity: .5; cursor: not-allowed; }
+.auth-logged { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }

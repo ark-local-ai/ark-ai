@@ -380,3 +380,78 @@ export async function listTasks(): Promise<RecentTaskDto[]> {
   if (!res.ok) throw new Error(`获取任务列表失败: ${res.status}`);
   return res.json();
 }
+
+// ===== 本地用户认证（M12）=====
+const TOKEN_KEY = "ark_session_token";
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+export function setToken(token: string | null): void {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  displayName: string;
+  created: string;
+}
+
+async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(`${BASE}${path}`, { ...init, headers });
+}
+
+/** 首屏：是否有用户、是否已登录 */
+export async function getAuthStatus(): Promise<{ hasUsers: boolean; me: AuthUser | null }> {
+  const res = await fetch(`${BASE}/api/auth/status`);
+  return res.json();
+}
+
+export async function register(username: string, password: string, displayName?: string): Promise<AuthUser> {
+  const res = await authFetch("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, password, displayName }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error ?? `注册失败: ${res.status}`);
+  }
+  const data = (await res.json()) as { token: string; user: AuthUser };
+  setToken(data.token);
+  return data.user;
+}
+
+export async function login(username: string, password: string): Promise<AuthUser> {
+  const res = await authFetch("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error((e as { error?: string }).error ?? `登录失败: ${res.status}`);
+  }
+  const data = (await res.json()) as { token: string; user: AuthUser };
+  setToken(data.token);
+  return data.user;
+}
+
+export async function logout(): Promise<void> {
+  try { await authFetch("/api/auth/logout", { method: "POST" }); } catch { /* 忽略 */ }
+  setToken(null);
+}
+
+/** 取当前登录用户；未登录返回 null */
+export async function me(): Promise<AuthUser | null> {
+  const res = await authFetch("/api/auth/me");
+  if (!res.ok) return null;
+  const data = (await res.json()) as { user: AuthUser };
+  return data.user;
+}

@@ -239,3 +239,113 @@ export function getActiveSpace(): Space | undefined {
   if (first) return first;
   return listSpaces()[0];
 }
+
+// ============================== 用户与会话（本地多用户）==============================
+// 密码用 Node 内置 crypto.scrypt 哈希（零依赖、本地优先、免原生编译）。
+// 会话 = 随机 token（存 sessions 表，带过期），前端持 token 走 Bearer 头。
+
+export interface User {
+  id: string;
+  username: string;
+  displayName: string;
+  created: string;
+}
+
+export interface SessionRow {
+  token: string;
+  userId: string;
+  expires: number;
+}
+
+// 建表（幂等）
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    created TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires INTEGER NOT NULL
+  );
+`);
+
+export type UserRow = {
+  id: string; username: string; password_hash: string; display_name: string; created: string;
+};
+
+// ---- 密码哈希（scrypt：随机盐 + 时间成本）----
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64) as Buffer;
+  return `${salt.toString("hex")}:${hash.toString("hex")}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [saltHex, hashHex] = stored.split(":");
+  if (!saltHex || !hashHex) return false;
+  const salt = Buffer.from(saltHex, "hex");
+  const expected = Buffer.from(hashHex, "hex");
+  const actual = scryptSync(password, salt, 64) as Buffer;
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+// ---- 用户读写 ----
+export function findUserByUsername(username: string): UserRow | undefined {
+  return db.prepare(`SELECT * FROM users WHERE username = ?`).get(username) as UserRow | undefined;
+}
+
+export function findUserById(id: string): User | undefined {
+  const r = db.prepare(`SELECT id, username, display_name, created FROM users WHERE id = ?`).get(id) as
+    | { id: string; username: string; display_name: string; created: string }
+    | undefined;
+  return r ? { id: r.id, username: r.username, displayName: r.display_name, created: r.created } : undefined;
+}
+
+export function createUser(username: string, password: string, displayName: string): User {
+  const id = `u-${randomBytes(6).toString("hex")}`;
+  const created = new Date().toLocaleString("zh-CN", { hour12: false });
+  const hash = hashPassword(password);
+  db.prepare(`INSERT INTO users (id, username, password_hash, display_name, created) VALUES (?, ?, ?, ?, ?)`)
+    .run(id, username, hash, displayName || username, created);
+  return { id, username, displayName: displayName || username, created };
+}
+
+export function countUsers(): number {
+  const r = db.prepare(`SELECT COUNT(*) AS n FROM users`).get() as { n: number };
+  return r.n;
+}
+
+// ---- 会话 ----
+const SESSION_TTL = 7 * 24 * 3600 * 1000; // 7 天
+
+export function createSession(userId: string): string {
+  const token = randomBytes(24).toString("hex");
+  const expires = Date.now() + SESSION_TTL;
+  db.prepare(`INSERT INTO sessions (token, user_id, expires) VALUES (?, ?, ?)`)
+    .run(token, userId, expires);
+  return token;
+}
+
+export function resolveSession(token: string): User | undefined {
+  const row = db.prepare(`SELECT user_id, expires FROM sessions WHERE token = ?`).get(token) as
+    | { user_id: string; expires: number }
+    | undefined;
+  if (!row) return undefined;
+  if (Date.now() > row.expires) return undefined; // 过期即失效
+  return findUserById(row.user_id);
+}
+
+export function destroySession(token: string): void {
+  db.prepare(`DELETE FROM sessions WHERE token = ?`).run(token);
+}
+
+/** 清理过期会话（可选，不阻塞） */
+export function pruneSessions(): void {
+  db.prepare(`DELETE FROM sessions WHERE expires < ?`).run(Date.now());
+}
