@@ -9,6 +9,7 @@ import { publish } from "./events";
 import { planTask } from "./planner";
 import { genOffice, detectKind, type StepContent } from "../tools/office";
 import { defaultTool } from "../tools/registry";
+import { generateContent } from "../tools/llmContent";
 import { verifyWithRetry } from "./verifier";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -110,10 +111,16 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
       // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word），注入各步结果，带验收重试（最多 3 次）
       // 写入当前活动空间的工作目录（默认空间 → 根目录）
       const dir = resolveWorkDir();
+      // M10a：优先用 LLM 生成整篇真实正文；无渠道/失败自动降级为步骤脚本内容
+      const { sections: contentSections, viaLLM } = await generateContent(prompt, plan, kind);
       const { name, kind: fKind } = await verifyWithRetry(
-        () => genOffice(prompt, plan, dir, sections), 3,
+        () => genOffice(prompt, plan, dir, contentSections), 3,
       );
-      const deliver: Artifact = { name, kind: fKind, note: "Ark 生成 · 可编辑 Office 文件（含逐步执行内容）", path: name };
+      const deliver: Artifact = {
+        name, kind: fKind,
+        note: viaLLM ? "Ark 生成 · 真实 LLM 内容 · 可编辑 Office 文件" : "Ark 生成 · 脚本模板（未配模型渠道）· 可编辑 Office 文件",
+        path: name,
+      };
       insertArtifact(deliver, id, 1);
       task.deliverable = deliver;
       publish({ type: "deliver", taskId: id, data: deliver });
