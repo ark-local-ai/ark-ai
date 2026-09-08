@@ -31,7 +31,7 @@ function resolveWorkDir(): string {
  * （产出每步内容）→ 最后把各步结果注入可编辑 Office 交付文件。
  * M10：中间步骤不再只是"等待"，而是真正走工具产出，交付内容不再全占位。
  */
-export async function runTask(id: string, prompt: string): Promise<Task> {
+export async function runTask(id: string, prompt: string, userId?: string): Promise<Task> {
   const title = prompt.slice(0, 20) || "未命名任务";
   const created = new Date().toLocaleString("zh-CN", { hour12: false });
 
@@ -56,7 +56,7 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
   };
 
   // 持久化任务 + 步骤
-  insertTask(task);
+  insertTask(task, userId);
   const stepIds: number[] = [];
   plan.forEach((p, i) => stepIds.push(insertStep(id, i, p)));
   task.steps = plan.map((title, i) => ({ id: stepIds[i], title, status: "pending" }));

@@ -9,6 +9,7 @@ import type { FastifyInstance } from "fastify";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { scanWorkspace } from "../tools/workspace";
+import { currentUser } from "./auth.js";
 import {
   listSpaces, getSpace, createSpace, updateSpace, deleteSpace, getActiveSpace, getSpaceByDir,
 } from "../db/store";
@@ -28,9 +29,10 @@ export function resolveSpaceDir(id: string): string | null {
 }
 
 export async function spaceRoutes(app: FastifyInstance) {
-  // 空间列表（含文件数）
-  app.get("/", async () => {
-    return listSpaces().map((s) => ({
+  // 空间列表（含文件数）；多用户隔离：登录用户见自己的+全局，未登录见全部
+  app.get("/", async (req) => {
+    const userId = currentUser(req)?.id;
+    return listSpaces(userId).map((s) => ({
       ...s,
       files: scanWorkspace(spaceDir(s.dir)).length,
     }));
@@ -44,7 +46,8 @@ export async function spaceRoutes(app: FastifyInstance) {
     const dir = req.body?.dir?.trim() || id;
     // 目录冲突检查
     if (getSpaceByDir(dir)) return reply.code(400).send({ error: "目录已存在" });
-    const space = createSpace(name, dir, id);
+    const userId = currentUser(req)?.id; // 归属当前登录用户；未登录 → 全局
+    const space = createSpace(name, dir, id, userId);
     mkdirSync(spaceDir(dir), { recursive: true });
     return reply.code(201).send(space);
   });
