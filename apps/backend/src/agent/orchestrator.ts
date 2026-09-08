@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Task, TaskStep, Artifact } from "../types";
 import {
   insertTask, insertStep, updateStepStatus, updateTaskStatus,
-  insertArtifact, getTask, updateTaskChecksAndTimeline,
+  insertArtifact, getTask, updateTaskChecksAndTimeline, getActiveSpace,
 } from "../db/store";
 import { publish } from "./events";
 import { planTask } from "./planner";
@@ -13,9 +13,17 @@ import { verifyWithRetry } from "./verifier";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** 交付目录（工作空间） */
-const workDir = join(process.cwd(), "..", "frontend", "public", "workspace");
-mkdirSync(workDir, { recursive: true });
+/** 工作空间根目录 */
+const workRoot = join(process.cwd(), "..", "frontend", "public", "workspace");
+mkdirSync(workRoot, { recursive: true });
+
+/** 解析当前活动空间的交付目录（默认空间 dir 为空 → 根目录） */
+function resolveWorkDir(): string {
+  const active = getActiveSpace();
+  const dir = active?.dir ? join(workRoot, active.dir) : workRoot;
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 /**
  * 编排闭环：planner 拆步骤（优先 LLM，无渠道降级脚本）→ 逐条经 Tool Registry 真执行
@@ -100,8 +108,10 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
 
     if (stepIdx === plan.length - 1) {
       // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word），注入各步结果，带验收重试（最多 3 次）
+      // 写入当前活动空间的工作目录（默认空间 → 根目录）
+      const dir = resolveWorkDir();
       const { name, kind: fKind } = await verifyWithRetry(
-        () => genOffice(prompt, plan, workDir, sections), 3,
+        () => genOffice(prompt, plan, dir, sections), 3,
       );
       const deliver: Artifact = { name, kind: fKind, note: "Ark 生成 · 可编辑 Office 文件（含逐步执行内容）", path: name };
       insertArtifact(deliver, id, 1);

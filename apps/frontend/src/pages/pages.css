@@ -154,3 +154,13 @@
 .msg.ai .msg-bub { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 5px; box-shadow: var(--shadow-sm); }
 .chat-page { display: flex; flex-direction: column; }
 .chat-page .chat-list { flex: 1; overflow: auto; }
+
+/* 工作空间 · 新建（内联输入） */
+.space-item.add:hover { background: var(--brand-soft); }
+.space-new { padding: 4px 2px; display: flex; flex-direction: column; gap: 6px; }
+.space-new input {
+  width: 100%; padding: 7px 9px; font-size: 13px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-1); outline: none;
+}
+.space-new input:focus { border-color: var(--brand); }
+.space-new-ops { display: flex; gap: 6px; justify-content: flex-end; }

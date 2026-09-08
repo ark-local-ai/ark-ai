@@ -53,8 +53,9 @@ export function subscribeTask(id: string, onEvent: SseHandler): () => void {
   return () => es.close();
 }
 
-export function workspaceUrl(name: string): string {
-  return `${BASE}/api/workspace/${encodeURIComponent(name)}`;
+export function workspaceUrl(name: string, spaceId?: string): string {
+  const q = spaceId ? `?space=${encodeURIComponent(spaceId)}` : "";
+  return `${BASE}/api/workspace/${encodeURIComponent(name)}${q}`;
 }
 
 export interface WorkspaceFileDto {
@@ -65,10 +66,55 @@ export interface WorkspaceFileDto {
   time: string;
 }
 
-/** 工作空间真目录扫描：列出交付文件（类型/大小/时间） */
-export async function listWorkspace(): Promise<WorkspaceFileDto[]> {
-  const res = await fetch(`${BASE}/api/workspace`);
+/** 工作空间真目录扫描：列出交付文件（类型/大小/时间）。spaceId 缺省扫默认空间根目录 */
+export async function listWorkspace(spaceId?: string): Promise<WorkspaceFileDto[]> {
+  const q = spaceId ? `?space=${encodeURIComponent(spaceId)}` : "";
+  const res = await fetch(`${BASE}/api/workspace${q}`);
   if (!res.ok) throw new Error(`获取工作空间失败: ${res.status}`);
+  return res.json();
+}
+
+// ===== 多工作空间（spaces）=====
+export interface SpaceDto {
+  id: string;
+  name: string;
+  dir: string;
+  isActive: boolean;
+  created: string;
+  files?: number;
+}
+
+export async function listSpaces(): Promise<SpaceDto[]> {
+  const res = await fetch(`${BASE}/api/spaces`);
+  if (!res.ok) throw new Error(`获取空间失败: ${res.status}`);
+  return res.json();
+}
+
+export async function createSpace(name: string, dir?: string): Promise<SpaceDto> {
+  const res = await fetch(`${BASE}/api/spaces`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, dir }),
+  });
+  if (!res.ok) throw new Error(`新建空间失败: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteSpace(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/spaces/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`删除空间失败: ${res.status}`);
+}
+
+export async function setActiveSpace(id: string): Promise<SpaceDto> {
+  const res = await fetch(`${BASE}/api/spaces/${id}/active`, { method: "POST" });
+  if (!res.ok) throw new Error(`切换空间失败: ${res.status}`);
+  return res.json();
+}
+
+/** 某空间目录下的文件列表 */
+export async function listSpaceFiles(id: string): Promise<WorkspaceFileDto[]> {
+  const res = await fetch(`${BASE}/api/spaces/${id}/files`);
+  if (!res.ok) throw new Error(`获取空间文件失败: ${res.status}`);
   return res.json();
 }
 

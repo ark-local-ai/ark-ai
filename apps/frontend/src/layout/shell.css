@@ -411,3 +411,13 @@
 }
 .sb-search input { flex: 1; background: transparent; border: none; outline: none; font-size: 12px; color: var(--text-1); }
 .sb-search input::placeholder { color: var(--text-3); }
+
+/* 侧栏 · 新建工作空间（内联输入） */
+.sb-newspace { padding: 5px 7px; display: flex; flex-direction: column; gap: 6px; }
+.sb-newspace input {
+  width: 100%; padding: 6px 8px; font-size: 12px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-1); outline: none;
+}
+.sb-newspace input:focus { border-color: var(--brand); }
+.sb-newspace-ops { display: flex; gap: 6px; justify-content: flex-end; }
+.sb-grp.add-grp { margin-top: 2px; }
