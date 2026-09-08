@@ -88,3 +88,45 @@ export function getChannelStats(): {
 
 /** 兜底：仍暴露 getDefaultChannel 语义（无渠道时 null） */
 export { getDefaultChannel };
+
+// ===== 多渠道 failover（接真 LLM 的核心韧性） =====
+// 之前各调用方只 `pickChannel()` 挑一个"最稳"渠道，一旦它失败（key 失效/超时/限流）就直接
+// 降级脚本——明明还有其它已配置渠道可能能用。这里按成功率从高到低逐个尝试，直到某渠道成功
+// 返回；全部失败才抛错（由上层降级脚本）。每次尝试都记统计，路由下次更稳。
+
+import { chat, type ChatMessage, type ChatOptions } from "./client";
+
+/** 渠道按成功率从高到低排序（无记录的成功率按 1 处理，但优先级低于有成功记录的） */
+function orderedChannels(): Channel[] {
+  return getChannels().sort((a, b) => {
+    const sa = readStat(a.id);
+    const sb = readStat(b.id);
+    const scoreA = successRate(sa) * 1000 + (sa.ok > 0 ? 1 : 0);
+    const scoreB = successRate(sb) * 1000 + (sb.ok > 0 ? 1 : 0);
+    return scoreB - scoreA;
+  });
+}
+
+/**
+ * 依次尝试所有渠道直到一次成功（非流式）。按成功率从高到低。
+ * 至少一次成功返回该渠道与文本；全部失败抛最后一次错误（上层决定降级）。
+ */
+export async function chatWithFailover(
+  messages: ChatMessage[],
+  opts: ChatOptions = {},
+): Promise<{ text: string; channel: string; model: string }> {
+  const channels = orderedChannels();
+  if (!channels.length) throw new Error("无可用渠道");
+  let lastErr: unknown = new Error("无可用渠道");
+  for (const c of channels) {
+    try {
+      const text = await chat(c, messages, { timeoutMs: 20000, ...opts });
+      recordSuccess(c.id);
+      return { text, channel: c.name, model: c.model };
+    } catch (e) {
+      recordFailure(c.id);
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}

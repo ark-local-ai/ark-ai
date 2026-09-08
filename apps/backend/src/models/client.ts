@@ -6,6 +6,8 @@ import type { Channel } from "../config/channels";
 export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
+  /** 单次调用超时（默认 30s）。failover 用；避免一个无响应的渠道拖住整次尝试。 */
+  timeoutMs?: number;
 }
 
 /** 单轮补全（非流式），返回文本。失败抛错由调用方决定降级。 */
@@ -29,6 +31,7 @@ export async function chat(
       max_tokens: opts.maxTokens ?? 2048,
       stream: false,
     }),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 30000),
   });
   if (!res.ok) {
     const body = await res.text();
