@@ -11,6 +11,7 @@ import { expertRoutes } from "./routes/experts.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { connectorRoutes } from "./routes/connectors.js";
 import { scenarioRoutes } from "./routes/scenarios.js";
+import { spaceRoutes, resolveSpaceDir } from "./routes/spaces.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { startScheduler } from "./scheduler/jobs.js";
 
@@ -31,18 +32,27 @@ export async function buildApp() {
   app.register(jobRoutes, { prefix: "/api/jobs" });
   app.register(connectorRoutes, { prefix: "/api/connectors" });
   app.register(scenarioRoutes, { prefix: "/api/scenarios" });
+  app.register(spaceRoutes, { prefix: "/api/spaces" });
 
-  // 工作空间列表（真目录扫描）
-  app.get("/api/workspace", async () => {
+  // 工作空间列表：?space=<id> 指定空间目录，缺省扫根（默认工作空间）
+  app.get("/api/workspace", async (req) => {
+    const q = (req.query as { space?: string }).space;
+    if (q) {
+      const dir = resolveSpaceDir(q);
+      if (!dir) return { error: "空间不存在" } as never;
+      return scanWorkspace(dir);
+    }
     return scanWorkspace(workDir);
   });
 
-  // 工作空间静态文件（成果下载）
+  // 工作空间静态文件（成果下载）：?space=<id> 支持从空间子目录取
   app.get("/api/workspace/*", (req, reply) => {
     const name = (req.params as { "*": string })["*"];
+    const q = (req.query as { space?: string }).space;
+    const root = q && resolveSpaceDir(q) ? resolveSpaceDir(q)! : workDir;
     // 防目录穿越：只允许工作空间内的文件
-    const file = normalize(join(workDir, name));
-    if (!file.startsWith(workDir)) return reply.code(403).send({ error: "禁止访问" });
+    const file = normalize(join(root, name));
+    if (!file.startsWith(root)) return reply.code(403).send({ error: "禁止访问" });
     return reply.type("application/octet-stream").send(createReadStream(file));
   });
 

@@ -6,8 +6,8 @@ import {
   IconShare, IconRename, IconDots, IconSpark, IconTrash, IconUsers,
   ArkLogo, IconCollapse,
 } from "../components/icons";
-import { recentTasks as mockRecentTasks, spaces } from "../data/mock";
-import { listTasks } from "../api";
+import { recentTasks as mockRecentTasks } from "../data/mock";
+import { listTasks, listSpaces, createSpace, setActiveSpace, deleteSpace, type SpaceDto } from "../api";
 
 type Mode = "task" | "space";
 
@@ -42,7 +42,28 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
       .then((ts) => setTasks(ts.map((t) => ({ id: t.id, title: t.title, time: t.created, space: null as string | null }))))
       .catch(() => {});
   }, []);
-  const [spaceList, setSpaceList] = useState(spaces.filter((s) => s.name !== "默认工作空间"));
+  // 真实空间列表（来自后端 /api/spaces），排除默认空间（放进「任务」抽屉）
+  const [spaceList, setSpaceList] = useState<SpaceDto[]>([]);
+  useEffect(() => {
+    listSpaces()
+      .then((ss) => setSpaceList(ss.filter((s) => s.id !== "default")))
+      .catch(() => {});
+  }, []);
+  // 新建空间（从侧栏 + 按钮触发）
+  const [newing, setNewing] = useState(false);
+  const [newSpaceName, setNewSpaceName] = useState("");
+  const doCreateSpace = async () => {
+    const name = newSpaceName.trim();
+    if (!name) return;
+    try {
+      const sp = await createSpace(name);
+      await setActiveSpace(sp.id).catch(() => {});
+      await listSpaces().then((ss) => setSpaceList(ss.filter((s) => s.id !== "default"))).catch(() => {});
+      setNewSpaceName("");
+      setNewing(false);
+      nav("/app/workspace");
+    } catch { /* 忽略 */ }
+  };
 
   const kw = q.trim().toLowerCase();
   const matched = useMemo(
@@ -57,16 +78,15 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
     ...s,
     items: tasks.filter((t) => t.space === s.name),
   }));
-
   const toggleFold = (k: string) => setFold((f) => ({ ...f, [k]: !f[k] }));
   const setAllFold = (v: boolean) => setFold(() => {
     const all: Record<string, boolean> = {};
-    spaceGroups.forEach((s) => { all[`sp-${s.name}`] = v; });
+    spaceGroups.forEach((s) => { all[`sp-${s.id}`] = v; });
     all["tasklist"] = v;
     return all;
   });
   const allFolded = (() => {
-    const keys = [...spaceGroups.map((s) => `sp-${s.name}`), "tasklist"];
+    const keys = [...spaceGroups.map((s) => `sp-${s.id}`), "tasklist"];
     return keys.every((k) => fold[k]);
   })();
 
@@ -75,7 +95,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
     if (delTarget.kind === "task") {
       setTasks((ts) => ts.filter((t) => t.id !== delTarget.id));
     } else {
-      setSpaceList((ls) => ls.filter((s) => s.name !== delTarget.id));
+      // 删除真实空间（调后端，而非仅本地过滤）
+      deleteSpace(delTarget.id).catch(() => {});
+      setSpaceList((ls) => ls.filter((s) => s.id !== delTarget.id));
       setTasks((ts) => ts.filter((t) => t.space !== delTarget.id));
     }
     setDelTarget(null);
@@ -176,9 +198,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               <>
                 {spaceGroups.map((s) => {
                   const items = s.items;
-                  const key = `sp-${s.name}`;
+                  const key = `sp-${s.id}`;
                   return (
-                    <div className="sb-grpwrap" key={s.name}>
+                    <div className="sb-grpwrap" key={s.id}>
                       <button className="sb-grp" onClick={() => toggleFold(key)}>
                         <IconChevD size={12} className={fold[key] ? "fold" : ""} />
                         <IconFolder size={12} />
@@ -186,7 +208,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         <span className="grp-add" onClick={(e) => { e.stopPropagation(); setMode("task"); nav("/app"); }}>
                           <IconNote size={13} />
                         </span>
-                        <span className="grp-del" onClick={(e) => { e.stopPropagation(); openCtx("space", s.name, s.name, e); }}>
+                        <span className="grp-del" onClick={(e) => { e.stopPropagation(); openCtx("space", s.id, s.name, e); }}>
                           <IconDots size={13} />
                         </span>
                       </button>
@@ -197,6 +219,26 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                     </div>
                   );
                 })}
+
+                {/* 新建工作空间（内联输入） */}
+                <div className="sb-grpwrap">
+                  {newing ? (
+                    <div className="sb-newspace">
+                      <input autoFocus value={newSpaceName} placeholder="空间名称"
+                        onChange={(e) => setNewSpaceName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") doCreateSpace(); if (e.key === "Escape") setNewing(false); }} />
+                      <div className="sb-newspace-ops">
+                        <button className="btn ghost sm" onClick={() => setNewing(false)}>取消</button>
+                        <button className="btn sm" onClick={doCreateSpace}>创建</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button className="sb-grp add-grp" onClick={() => setNewing(true)}>
+                      <IconNote size={12} />
+                      <span className="lb" style={{ color: "var(--brand)" }}>＋ 新建工作空间</span>
+                    </button>
+                  )}
+                </div>
 
                 {/* 任务抽屉：未指定命名空间/默认新建的对话 */}
                 <div className="sb-grpwrap">

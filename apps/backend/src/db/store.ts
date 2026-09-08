@@ -152,3 +152,90 @@ export function listTasks(limit = 50): TaskSummary[] {
     .all(limit) as { id: string; title: string; created: string; status: TaskStatus }[];
   return rows.map((r) => ({ id: r.id, title: r.title, created: r.created, status: r.status }));
 }
+
+// ============================== 多工作空间 spaces ==============================
+// 每个空间 = SQLite 一行 + 磁盘一个工作目录（workspace/<dir>/）。
+// 数据不出本机：表建在本地 ark.db，目录在本地 workspace。
+
+export interface Space {
+  id: string;
+  name: string;
+  dir: string;      // 工作子目录名（唯一）
+  isActive: boolean; // 是否活动空间
+  created: string;
+}
+
+// 建表（幂等）
+db.exec(`
+  CREATE TABLE IF NOT EXISTS spaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    dir TEXT NOT NULL UNIQUE,
+    is_active INTEGER NOT NULL DEFAULT 0,
+    created TEXT NOT NULL
+  );
+`);
+
+// 首次启动若没有空间，播种一个「默认工作空间」（dir 为空字符串表示根目录，兼容既有平铺文件）
+function seedSpaces(): void {
+  const n = db.prepare(`SELECT COUNT(*) AS n FROM spaces`).get() as { n: number };
+  if (n.n === 0) {
+    db.prepare(`INSERT INTO spaces (id, name, dir, is_active, created) VALUES (?, ?, ?, ?, ?)`)
+      .run("default", "默认工作空间", "", 1, new Date().toLocaleString("zh-CN", { hour12: false }));
+  }
+}
+seedSpaces();
+
+export function listSpaces(): Space[] {
+  const rows = db.prepare(`SELECT id, name, dir, is_active, created FROM spaces ORDER BY rowid`).all() as {
+    id: string; name: string; dir: string; is_active: number; created: string;
+  }[];
+  return rows.map((r) => ({ id: r.id, name: r.name, dir: r.dir, isActive: r.is_active === 1, created: r.created }));
+}
+
+export function getSpace(id: string): Space | undefined {
+  const row = db.prepare(`SELECT id, name, dir, is_active, created FROM spaces WHERE id = ?`).get(id) as
+    | { id: string; name: string; dir: string; is_active: number; created: string }
+    | undefined;
+  return row ? { id: row.id, name: row.name, dir: row.dir, isActive: row.is_active === 1, created: row.created } : undefined;
+}
+
+export function getSpaceByDir(dir: string): Space | undefined {
+  const row = db.prepare(`SELECT id, name, dir, is_active, created FROM spaces WHERE dir = ?`).get(dir) as
+    | { id: string; name: string; dir: string; is_active: number; created: string }
+    | undefined;
+  return row ? { id: row.id, name: row.name, dir: row.dir, isActive: row.is_active === 1, created: row.created } : undefined;
+}
+
+export function createSpace(name: string, dir: string, id?: string): Space {
+  const sid = id ?? `sp-${Math.random().toString(36).slice(2, 8)}`;
+  const created = new Date().toLocaleString("zh-CN", { hour12: false });
+  db.prepare(`INSERT INTO spaces (id, name, dir, is_active, created) VALUES (?, ?, ?, ?, ?)`)
+    .run(sid, name, dir, 0, created);
+  return { id: sid, name, dir, isActive: false, created };
+}
+
+export function updateSpace(
+  id: string,
+  patch: { name?: string; dir?: string; isActive?: boolean },
+): Space | undefined {
+  const cur = getSpace(id);
+  if (!cur) return undefined;
+  const name = patch.name ?? cur.name;
+  const dir = patch.dir ?? cur.dir;
+  const isActive = patch.isActive ?? cur.isActive;
+  db.prepare(`UPDATE spaces SET name = ?, dir = ?, is_active = ? WHERE id = ?`).run(name, dir, isActive ? 1 : 0, id);
+  return getSpace(id);
+}
+
+export function deleteSpace(id: string): boolean {
+  const r = db.prepare(`DELETE FROM spaces WHERE id = ?`).run(id);
+  return Number(r.changes) > 0;
+}
+
+/** 活动空间（is_active=1），无则取第一个，再无可取 null */
+export function getActiveSpace(): Space | undefined {
+  const first = listSpaces().find((s) => s.isActive);
+  if (first) return first;
+  return listSpaces()[0];
+}
