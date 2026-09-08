@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { runTask } from "../agent/orchestrator.js";
+import { enqueueTask } from "../agent/runner.js";
 import { getTask, listTasks } from "../db/store.js";
 import { subscribe } from "../agent/events.js";
 import { currentUser } from "./auth.js";
@@ -14,8 +14,8 @@ export async function taskRoutes(app: FastifyInstance) {
     }
     const id = randomUUID().slice(0, 8);
     const userId = currentUser(req)?.id; // 归属当前登录用户；未登录 → 全局
-    // 立即返回任务 id；编排在后台异步执行
-    void runTask(id, prompt, userId);
+    // 立即返回任务 id；编排入队后台串行执行（队列 + 失败兜底 + 超时，见 runner）
+    enqueueTask(id, prompt, userId);
     return reply.code(201).send({ taskId: id });
   });
 
