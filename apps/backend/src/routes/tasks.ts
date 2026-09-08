@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { runTask } from "../agent/orchestrator.js";
 import { getTask, listTasks } from "../db/store.js";
 import { subscribe } from "../agent/events.js";
+import { currentUser } from "./auth.js";
 
 export async function taskRoutes(app: FastifyInstance) {
   // 创建任务并开始编排（后台异步推进，SSE 接收进度）
@@ -12,13 +13,14 @@ export async function taskRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "prompt 不能为空" });
     }
     const id = randomUUID().slice(0, 8);
+    const userId = currentUser(req)?.id; // 归属当前登录用户；未登录 → 全局
     // 立即返回任务 id；编排在后台异步执行
-    void runTask(id, prompt);
+    void runTask(id, prompt, userId);
     return reply.code(201).send({ taskId: id });
   });
 
-  // 任务列表摘要（侧栏「最近任务」）
-  app.get("/", async () => listTasks(50));
+  // 任务列表摘要（侧栏「最近任务」）；多用户隔离：登录用户只见自己的+全局
+  app.get("/", async (req) => listTasks(50, currentUser(req)?.id));
 
   // 查询任务当前快照
   app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {

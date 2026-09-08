@@ -55,15 +55,21 @@ if (!stepCols.some((c) => c.name === "note")) {
   db.exec(`ALTER TABLE steps ADD COLUMN note TEXT`);
 }
 
+// ---- 迁移：多用户归属（tasks.user_id / spaces.user_id），NULL=全局/未登录兼容 ----
+const taskCols = db.prepare(`PRAGMA table_info(tasks)`).all() as { name: string }[];
+if (!taskCols.some((c) => c.name === "user_id")) {
+  db.exec(`ALTER TABLE tasks ADD COLUMN user_id TEXT`);
+}
+
 // ---- 任务写 / 读（node:sqlite 同步 API，prepare().run() / .get() / .all()）----
-export function insertTask(task: Task): void {
+export function insertTask(task: Task, userId?: string): void {
   db.prepare(
-    `INSERT INTO tasks (id, title, prompt, status, model, expert, skills, workspace, checks, timeline, created)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tasks (id, title, prompt, status, model, expert, skills, workspace, checks, timeline, created, user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id, task.title, task.prompt, task.status, task.model, task.expert,
     JSON.stringify(task.skills), task.workspace,
-    JSON.stringify(task.checks), JSON.stringify(task.timeline), task.created,
+    JSON.stringify(task.checks), JSON.stringify(task.timeline), task.created, userId ?? null,
   );
 }
 
@@ -147,9 +153,13 @@ export interface TaskSummary {
 }
 
 /** 任务列表摘要（供侧栏「最近任务」），按创建时间倒序 */
-export function listTasks(limit = 50): TaskSummary[] {
-  const rows = db.prepare(`SELECT id, title, created, status FROM tasks ORDER BY created DESC LIMIT ?`)
-    .all(limit) as { id: string; title: string; created: string; status: TaskStatus }[];
+export function listTasks(limit = 50, userId?: string): TaskSummary[] {
+  // 多用户隔离：登录用户看自己的 + 全局无主任务；未登录看全部（兼容）
+  const rows = userId
+    ? db.prepare(`SELECT id, title, created, status FROM tasks WHERE user_id = ? OR user_id IS NULL ORDER BY created DESC LIMIT ?`)
+      .all(userId, limit) as { id: string; title: string; created: string; status: TaskStatus }[]
+    : db.prepare(`SELECT id, title, created, status FROM tasks ORDER BY created DESC LIMIT ?`)
+      .all(limit) as { id: string; title: string; created: string; status: TaskStatus }[];
   return rows.map((r) => ({ id: r.id, title: r.title, created: r.created, status: r.status }));
 }
 
@@ -163,6 +173,7 @@ export interface Space {
   dir: string;      // 工作子目录名（唯一）
   isActive: boolean; // 是否活动空间
   created: string;
+  userId?: string;  // 归属用户；undefined=全局/默认
 }
 
 // 建表（幂等）
@@ -176,6 +187,12 @@ db.exec(`
   );
 `);
 
+// 迁移：旧库补 spaces.user_id 列（须在建表之后执行，否则全新库会因表不存在报错）
+const spaceCols = db.prepare(`PRAGMA table_info(spaces)`).all() as { name: string }[];
+if (!spaceCols.some((c) => c.name === "user_id")) {
+  db.exec(`ALTER TABLE spaces ADD COLUMN user_id TEXT`);
+}
+
 // 首次启动若没有空间，播种一个「默认工作空间」（dir 为空字符串表示根目录，兼容既有平铺文件）
 function seedSpaces(): void {
   const n = db.prepare(`SELECT COUNT(*) AS n FROM spaces`).get() as { n: number };
@@ -186,11 +203,19 @@ function seedSpaces(): void {
 }
 seedSpaces();
 
-export function listSpaces(): Space[] {
-  const rows = db.prepare(`SELECT id, name, dir, is_active, created FROM spaces ORDER BY rowid`).all() as {
-    id: string; name: string; dir: string; is_active: number; created: string;
-  }[];
-  return rows.map((r) => ({ id: r.id, name: r.name, dir: r.dir, isActive: r.is_active === 1, created: r.created }));
+export function listSpaces(userId?: string): Space[] {
+  // 多用户隔离：登录用户见自己的 + 全局；未登录见全部（兼容）
+  const rows = userId
+    ? db.prepare(`SELECT id, name, dir, is_active, created, user_id FROM spaces WHERE user_id = ? OR user_id IS NULL ORDER BY rowid`).all(userId) as {
+        id: string; name: string; dir: string; is_active: number; created: string; user_id: string | null;
+      }[]
+    : db.prepare(`SELECT id, name, dir, is_active, created, user_id FROM spaces ORDER BY rowid`).all() as {
+        id: string; name: string; dir: string; is_active: number; created: string; user_id: string | null;
+      }[];
+  return rows.map((r) => ({
+    id: r.id, name: r.name, dir: r.dir, isActive: r.is_active === 1, created: r.created,
+    userId: r.user_id ?? undefined,
+  }));
 }
 
 export function getSpace(id: string): Space | undefined {
@@ -207,12 +232,12 @@ export function getSpaceByDir(dir: string): Space | undefined {
   return row ? { id: row.id, name: row.name, dir: row.dir, isActive: row.is_active === 1, created: row.created } : undefined;
 }
 
-export function createSpace(name: string, dir: string, id?: string): Space {
+export function createSpace(name: string, dir: string, id?: string, userId?: string): Space {
   const sid = id ?? `sp-${Math.random().toString(36).slice(2, 8)}`;
   const created = new Date().toLocaleString("zh-CN", { hour12: false });
-  db.prepare(`INSERT INTO spaces (id, name, dir, is_active, created) VALUES (?, ?, ?, ?, ?)`)
-    .run(sid, name, dir, 0, created);
-  return { id: sid, name, dir, isActive: false, created };
+  db.prepare(`INSERT INTO spaces (id, name, dir, is_active, created, user_id) VALUES (?, ?, ?, ?, ?, ?)`)
+    .run(sid, name, dir, 0, created, userId ?? null);
+  return { id: sid, name, dir, isActive: false, created, userId };
 }
 
 export function updateSpace(

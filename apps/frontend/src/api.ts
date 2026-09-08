@@ -22,7 +22,7 @@ export interface TaskDto {
 export async function createTask(prompt: string): Promise<string> {
   const res = await fetch(`${BASE}/api/tasks`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ prompt }),
   });
   if (!res.ok) throw new Error(`创建任务失败: ${res.status}`);
@@ -58,6 +58,14 @@ export function workspaceUrl(name: string, spaceId?: string): string {
   return `${BASE}/api/workspace/${encodeURIComponent(name)}${q}`;
 }
 
+/** 若已登录则附带 Bearer 头（资源按用户隔离）。getToken 为提升的函数声明，运行时可访问。 */
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const h: Record<string, string> = { ...(extra ?? {}) };
+  const t = getToken();
+  if (t) h.Authorization = `Bearer ${t}`;
+  return h;
+}
+
 export interface WorkspaceFileDto {
   name: string;
   kind: string;
@@ -69,7 +77,7 @@ export interface WorkspaceFileDto {
 /** 工作空间真目录扫描：列出交付文件（类型/大小/时间）。spaceId 缺省扫默认空间根目录 */
 export async function listWorkspace(spaceId?: string): Promise<WorkspaceFileDto[]> {
   const q = spaceId ? `?space=${encodeURIComponent(spaceId)}` : "";
-  const res = await fetch(`${BASE}/api/workspace${q}`);
+  const res = await fetch(`${BASE}/api/workspace${q}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`获取工作空间失败: ${res.status}`);
   return res.json();
 }
@@ -85,7 +93,7 @@ export interface SpaceDto {
 }
 
 export async function listSpaces(): Promise<SpaceDto[]> {
-  const res = await fetch(`${BASE}/api/spaces`);
+  const res = await fetch(`${BASE}/api/spaces`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`获取空间失败: ${res.status}`);
   return res.json();
 }
@@ -93,7 +101,7 @@ export async function listSpaces(): Promise<SpaceDto[]> {
 export async function createSpace(name: string, dir?: string): Promise<SpaceDto> {
   const res = await fetch(`${BASE}/api/spaces`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ name, dir }),
   });
   if (!res.ok) throw new Error(`新建空间失败: ${res.status}`);
@@ -101,19 +109,19 @@ export async function createSpace(name: string, dir?: string): Promise<SpaceDto>
 }
 
 export async function deleteSpace(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/spaces/${id}`, { method: "DELETE" });
+  const res = await fetch(`${BASE}/api/spaces/${id}`, { method: "DELETE", headers: authHeaders() });
   if (!res.ok) throw new Error(`删除空间失败: ${res.status}`);
 }
 
 export async function setActiveSpace(id: string): Promise<SpaceDto> {
-  const res = await fetch(`${BASE}/api/spaces/${id}/active`, { method: "POST" });
+  const res = await fetch(`${BASE}/api/spaces/${id}/active`, { method: "POST", headers: authHeaders() });
   if (!res.ok) throw new Error(`切换空间失败: ${res.status}`);
   return res.json();
 }
 
 /** 某空间目录下的文件列表 */
 export async function listSpaceFiles(id: string): Promise<WorkspaceFileDto[]> {
-  const res = await fetch(`${BASE}/api/spaces/${id}/files`);
+  const res = await fetch(`${BASE}/api/spaces/${id}/files`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`获取空间文件失败: ${res.status}`);
   return res.json();
 }
@@ -376,7 +384,7 @@ export async function listScenarios(): Promise<ScenarioDto[]> {
 export interface RecentTaskDto { id: string; title: string; created: string; status: string; }
 
 export async function listTasks(): Promise<RecentTaskDto[]> {
-  const res = await fetch(`${BASE}/api/tasks`);
+  const res = await fetch(`${BASE}/api/tasks`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`获取任务列表失败: ${res.status}`);
   return res.json();
 }
