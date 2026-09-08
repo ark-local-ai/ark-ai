@@ -7,7 +7,8 @@ import {
 } from "../db/store";
 import { publish } from "./events";
 import { planTask } from "./planner";
-import { genOffice } from "../tools/office";
+import { genOffice, detectKind, type StepContent } from "../tools/office";
+import { defaultTool } from "../tools/registry";
 import { verifyWithRetry } from "./verifier";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -17,8 +18,9 @@ const workDir = join(process.cwd(), "..", "frontend", "public", "workspace");
 mkdirSync(workDir, { recursive: true });
 
 /**
- * 里程碑2：编排闭环 —— 用 planner 拆步骤（优先 LLM，无渠道降级脚本），
- * 逐条执行、生成真实交付文件。LLM 真实拆解已接入：planner.ts。
+ * 编排闭环：planner 拆步骤（优先 LLM，无渠道降级脚本）→ 逐条经 Tool Registry 真执行
+ * （产出每步内容）→ 最后把各步结果注入可编辑 Office 交付文件。
+ * M10：中间步骤不再只是"等待"，而是真正走工具产出，交付内容不再全占位。
  */
 export async function runTask(id: string, prompt: string): Promise<Task> {
   const title = prompt.slice(0, 20) || "未命名任务";
@@ -64,6 +66,9 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
 
   let stepIdx = 0;
   let failed = false;
+  const kind = detectKind(prompt); // 交付类型（ppt/xls/doc），执行期就绪供工具使用
+  const sections: StepContent[] = []; // 逐步真实执行产出的内容，注入最终交付
+
   for (const title of plan) {
     // 标记当前步为 running
     if (stepIdx > 0) {
@@ -80,12 +85,25 @@ export async function runTask(id: string, prompt: string): Promise<Task> {
     publish({ type: "step", taskId: id, data: { stepId: sid, status: "running" } });
     tick();
 
-    await sleep(900); // 模拟执行耗时
+    // M10：逐步真实执行 —— 经 Tool Registry 调用工具，产出该步正文段
+    const tool = defaultTool; // 当前单一"内容整编"工具；后续按步选工具
+    const result = tool.run({ prompt, plan, step: title, kind });
+    sections.push({ title: result.title, paragraphs: result.body });
+
+    // 中间产物：每一步的内容作为 artifact 推送（无具体文件，仅展示说明）
+    publish({
+      type: "artifact", taskId: id,
+      data: { name: `步骤${stepIdx + 1}`, kind, note: result.body[0]?.slice(0, 40) ?? result.title, path: undefined },
+    });
+
+    await sleep(700); // 模拟执行/工具耗时
 
     if (stepIdx === plan.length - 1) {
-      // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word），带验收重试（最多 3 次）
-      const { name, kind } = await verifyWithRetry(() => genOffice(prompt, plan, workDir), 3);
-      const deliver: Artifact = { name, kind, note: "Ark 生成 · 可编辑 Office 文件", path: name };
+      // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word），注入各步结果，带验收重试（最多 3 次）
+      const { name, kind: fKind } = await verifyWithRetry(
+        () => genOffice(prompt, plan, workDir, sections), 3,
+      );
+      const deliver: Artifact = { name, kind: fKind, note: "Ark 生成 · 可编辑 Office 文件（含逐步执行内容）", path: name };
       insertArtifact(deliver, id, 1);
       task.deliverable = deliver;
       publish({ type: "deliver", taskId: id, data: deliver });
