@@ -7,7 +7,8 @@ import {
   ArkLogo, IconCollapse,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
-import { listTasks, listSpaces, createSpace, setActiveSpace, deleteSpace, type SpaceDto } from "../api";
+import { listTasks, listSpaces, createSpace, setActiveSpace, deleteSpace, getAuthStatus, type SpaceDto, type AuthUser } from "../api";
+import AuthModal from "../components/AuthModal";
 
 type Mode = "task" | "space";
 
@@ -64,6 +65,14 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
       nav("/app/workspace");
     } catch { /* 忽略 */ }
   };
+
+  // 本地多用户认证状态
+  const [me, setMe] = useState<AuthUser | null>(null);
+  const [hasUsers, setHasUsers] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  useEffect(() => {
+    getAuthStatus().then((s) => { setMe(s.me); setHasUsers(s.hasUsers); }).catch(() => {});
+  }, []);
 
   const kw = q.trim().toLowerCase();
   const matched = useMemo(
@@ -270,16 +279,24 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 </div>
               </>
             )}
-            <button className="sb-user" onClick={() => setMenuOpen((v) => !v)}>
-              <span className="ava">管</span>
+            <button className="sb-user" onClick={() => (me ? setMenuOpen((v) => !v) : setAuthOpen(true))}>
+              <span className="ava">{me ? me.displayName.slice(0, 1).toUpperCase() : "客"}</span>
               <span className="sb-user-t">
-                <b>超级管理员</b>
-                <span>本地工作区</span>
+                <b>{me ? me.displayName : (hasUsers ? "登录" : "创建账号")}</b>
+                <span>{me ? `@${me.username}` : "本地工作区 · 数据不出本机"}</span>
               </span>
             </button>
           </div>
         </>
       )}
+
+      <AuthModal
+        open={authOpen}
+        me={me}
+        hasUsers={hasUsers}
+        onClose={() => setAuthOpen(false)}
+        onChanged={(u) => setMe(u)}
+      />
 
       {/* 居中搜索弹板 */}
       {findOpen && (
