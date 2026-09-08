@@ -11,8 +11,8 @@ const GROUPS: { label?: string; items: string[] }[] = [
   { label: "系统", items: ["工作目录", "快捷键", "备份", "安全"] },
 ];
 
-const EMPTY: { name: string; proto: "openai" | "anthropic"; model: string; baseUrl: string; apiKey: string } =
-  { name: "", proto: "openai", model: "", baseUrl: "", apiKey: "" };
+const EMPTY: { name: string; proto: "openai" | "anthropic"; model: string; baseUrl: string; apiKey: string; priority: string; cost: string } =
+  { name: "", proto: "openai", model: "", baseUrl: "", apiKey: "", priority: "50", cost: "0" };
 
 export default function Settings() {
   const [sec, setSec] = useState("模型");
@@ -33,10 +33,17 @@ export default function Settings() {
 
   const submit = async () => {
     if (!form.name.trim() || !form.baseUrl.trim()) return;
+    const priority = Math.max(0, Math.min(100, Number(form.priority) || 50));
+    const cost = Math.max(0, Number(form.cost) || 0);
+    const body = {
+      name: form.name, proto: form.proto, model: form.model || "默认模型",
+      baseUrl: form.baseUrl, apiKey: form.apiKey || undefined,
+      priority, cost,
+    };
     if (editingId) {
-      await updateChannel(editingId, { name: form.name, proto: form.proto, model: form.model || "默认模型", baseUrl: form.baseUrl, apiKey: form.apiKey || undefined });
+      await updateChannel(editingId, body);
     } else {
-      await createChannel({ name: form.name, proto: form.proto, model: form.model || "默认模型", baseUrl: form.baseUrl, apiKey: form.apiKey || undefined });
+      await createChannel(body);
     }
     closeForm();
     load();
@@ -44,7 +51,10 @@ export default function Settings() {
 
   const edit = (c: ChannelDto) => {
     setEditingId(c.id);
-    setForm({ name: c.name, proto: c.proto, model: c.model, baseUrl: c.baseUrl ?? "", apiKey: c.apiKey ?? "" });
+    setForm({
+      name: c.name, proto: c.proto, model: c.model, baseUrl: c.baseUrl ?? "",
+      apiKey: c.apiKey ?? "", priority: String(c.priority ?? 50), cost: String(c.cost ?? 0),
+    });
     setShowForm(true);
   };
 
@@ -98,6 +108,10 @@ export default function Settings() {
                     <input className="inp" placeholder="模型，如：deepseek-chat（可留空）" value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} />
                     <input className="inp" placeholder="Base URL，如：https://api.deepseek.com/v1" value={form.baseUrl} onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))} />
                     <input className="inp" type="password" placeholder="API Key（可留空，本地 Ollama 不需要）" value={form.apiKey} onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))} />
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <input className="inp" placeholder="优先级 0-100（默认 50）" value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))} />
+                      <input className="inp" placeholder="成本 $/1K tokens（0=免费/本地）" value={form.cost} onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))} />
+                    </div>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                       <label style={{ fontSize: 13 }}>协议
                         <select className="inp" style={{ width: "auto", marginLeft: 8 }} value={form.proto}
@@ -118,8 +132,14 @@ export default function Settings() {
                   <div>
                     <div className="c-name">{c.name}</div>
                     <div className="c-url">{c.model} · {c.baseUrl ?? ""}</div>
-                    {typeof c.rate === "number" && c.rate > 0 && (
-                      <div className="c-url" style={{ color: "var(--text-3)" }}>成功率 {c.rate}%（{c.ok} 成 / {c.fail} 败）</div>
+                    {typeof c.rate === "number" && (
+                      <div className="c-url" style={{ color: "var(--text-3)" }}>
+                        成功率 {c.rate}%（{c.ok} 成 / {c.fail} 败）
+                        {c.latency ? ` · 均延迟 ${Math.round(c.latency)}ms` : ""}
+                        {typeof c.cost === "number" && c.cost > 0 ? ` · 成本 $${c.cost}/1K` : c.cost === 0 ? " · 近乎免费" : ""}
+                        · 优先级 {c.priority ?? 50}
+                        {typeof c.score === "number" ? ` · 评分 ${c.score.toFixed(2)}` : ""}
+                      </div>
                     )}
                   </div>
                   <span className="pill" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>{c.proto}</span>

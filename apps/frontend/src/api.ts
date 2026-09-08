@@ -312,6 +312,10 @@ export interface ChannelDto {
   ok?: number;
   fail?: number;
   rate?: number;
+  priority?: number; // 用户优先级 0-100，默认 50
+  cost?: number;     // 每千 token 成本（约 $）
+  latency?: number | null; // 实测平均延迟 ms
+  score?: number;    // 路由综合评分 0-1
 }
 
 export async function listChannels(): Promise<ChannelDto[]> {

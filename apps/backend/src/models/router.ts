@@ -14,48 +14,78 @@ db.exec(`
   );
 `);
 
-interface Stat { ok: number; fail: number }
+// 迁移：旧库补延迟统计列（成功调用累计耗时/次数 → 平均延迟）
+const stCols = db.prepare(`PRAGMA table_info(channel_stats)`).all() as { name: string }[];
+if (!stCols.some((c) => c.name === "latency_sum")) {
+  db.exec(`ALTER TABLE channel_stats ADD COLUMN latency_sum REAL NOT NULL DEFAULT 0`);
+}
+if (!stCols.some((c) => c.name === "latency_n")) {
+  db.exec(`ALTER TABLE channel_stats ADD COLUMN latency_n INTEGER NOT NULL DEFAULT 0`);
+}
+
+interface Stat { ok: number; fail: number; latencySum: number; latencyN: number }
 
 function readStat(id: string): Stat {
-  const row = db.prepare(`SELECT ok, fail FROM channel_stats WHERE id = ?`).get(id) as
-    | { ok: number; fail: number }
+  const row = db.prepare(`SELECT ok, fail, latency_sum, latency_n FROM channel_stats WHERE id = ?`).get(id) as
+    | { ok: number; fail: number; latency_sum: number; latency_n: number }
     | undefined;
-  return row ?? { ok: 0, fail: 0 };
+  return row
+    ? { ok: row.ok, fail: row.fail, latencySum: row.latency_sum ?? 0, latencyN: row.latency_n ?? 0 }
+    : { ok: 0, fail: 0, latencySum: 0, latencyN: 0 };
 }
 
 function writeStat(id: string, s: Stat): void {
   db.prepare(
-    `INSERT INTO channel_stats (id, ok, fail) VALUES (?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET ok = ?, fail = ?`,
-  ).run(id, s.ok, s.fail, s.ok, s.fail);
+    `INSERT INTO channel_stats (id, ok, fail, latency_sum, latency_n) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET ok = ?, fail = ?, latency_sum = ?, latency_n = ?`,
+  ).run(id, s.ok, s.fail, s.latencySum, s.latencyN, s.ok, s.fail, s.latencySum, s.latencyN);
 }
 
 export function recordSuccess(id: string): void {
   const s = readStat(id);
-  writeStat(id, { ok: s.ok + 1, fail: s.fail });
+  writeStat(id, { ok: s.ok + 1, fail: s.fail, latencySum: s.latencySum, latencyN: s.latencyN });
 }
 
 export function recordFailure(id: string): void {
   const s = readStat(id);
-  writeStat(id, { ok: s.ok, fail: s.fail + 1 });
+  writeStat(id, { ok: s.ok, fail: s.fail + 1, latencySum: s.latencySum, latencyN: s.latencyN });
+}
+
+/** 记录一次成功调用的耗时（ms），用于计算平均延迟 */
+export function recordLatency(id: string, ms: number): void {
+  const s = readStat(id);
+  writeStat(id, { ok: s.ok, fail: s.fail, latencySum: s.latencySum + ms, latencyN: s.latencyN + 1 });
 }
 
 function successRate(s: Stat): number {
   const total = s.ok + s.fail;
-  return total === 0 ? 1 : s.ok / total; // 无记录按可用处理，但优先级低于有成功记录的
+  return total === 0 ? 0.5 : s.ok / total; // 无记录按 0.5（中性）处理
 }
 
-/** 按成功率选最优渠道；完全没有渠道返回 null（调用方降级脚本） */
+/** 平均延迟 ms（无记录返回 null） */
+function avgLatency(s: Stat): number | null {
+  return s.latencyN > 0 ? s.latencySum / s.latencyN : null;
+}
+
+/** 单渠道综合评分（0~1）：可靠性为主，兼顾延迟/成本/用户优先级 */
+export function channelScore(c: Channel, s: Stat): number {
+  const reliability = successRate(s);
+  const latency = avgLatency(s);
+  const latencyScore = latency == null ? 0.5 : Math.max(0, 1 - latency / 4000); // <4s 加分，超时趋近 0
+  const costScore = !c.cost || c.cost <= 0 ? 1 : Math.max(0, 1 - c.cost / 50); // ~$50/1K tokens 之上趋近 0
+  const priorityScore = (c.priority ?? 50) / 100;
+  return reliability * 0.5 + latencyScore * 0.2 + costScore * 0.15 + priorityScore * 0.15;
+}
+
+/** 按综合评分选最优渠道；完全没有渠道返回 null（调用方降级脚本） */
 export function pickChannel(): Channel | null {
   const channels = getChannels();
   if (!channels.length) return null;
 
-  // 无成功记录时优先用有成功记录的；否则退回默认/第一个
   let best = channels[0];
   let bestScore = -1;
   for (const c of channels) {
-    const s = readStat(c.id);
-    const score = successRate(s) * 1000 + (s.ok > 0 ? 1 : 0);
+    const score = channelScore(c, readStat(c.id));
     if (score > bestScore) {
       bestScore = score;
       best = c;
@@ -68,6 +98,7 @@ export function pickChannel(): Channel | null {
 export function getChannelStats(): {
   id: string; name: string; model: string; proto: string; baseUrl: string;
   ok: number; fail: number; rate: number; default?: boolean;
+  priority: number; cost: number; latency: number | null; score: number;
 }[] {
   return getChannels().map((c) => {
     const s = readStat(c.id);
@@ -82,6 +113,10 @@ export function getChannelStats(): {
       fail: s.fail,
       rate: total === 0 ? 0 : Math.round((s.ok / total) * 100),
       default: c.default,
+      priority: c.priority ?? 50,
+      cost: c.cost ?? 0,
+      latency: avgLatency(s),
+      score: channelScore(c, s),
     };
   });
 }
@@ -96,15 +131,9 @@ export { getDefaultChannel };
 
 import { chat, type ChatMessage, type ChatOptions } from "./client";
 
-/** 渠道按成功率从高到低排序（无记录的成功率按 1 处理，但优先级低于有成功记录的） */
+/** 渠道按综合评分从高到低排序（可靠性+延迟+成本+优先级） */
 function orderedChannels(): Channel[] {
-  return getChannels().sort((a, b) => {
-    const sa = readStat(a.id);
-    const sb = readStat(b.id);
-    const scoreA = successRate(sa) * 1000 + (sa.ok > 0 ? 1 : 0);
-    const scoreB = successRate(sb) * 1000 + (sb.ok > 0 ? 1 : 0);
-    return scoreB - scoreA;
-  });
+  return getChannels().sort((a, b) => channelScore(b, readStat(b.id)) - channelScore(a, readStat(a.id)));
 }
 
 /**
@@ -119,9 +148,11 @@ export async function chatWithFailover(
   if (!channels.length) throw new Error("无可用渠道");
   let lastErr: unknown = new Error("无可用渠道");
   for (const c of channels) {
+    const t0 = Date.now();
     try {
       const text = await chat(c, messages, { timeoutMs: 20000, ...opts });
       recordSuccess(c.id);
+      recordLatency(c.id, Date.now() - t0);
       return { text, channel: c.name, model: c.model };
     } catch (e) {
       recordFailure(c.id);
