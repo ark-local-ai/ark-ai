@@ -46,7 +46,7 @@ vi.mock("../db/store.js", () => ({
   getActiveSpace: mocks.getActiveSpace,
 }));
 
-import { resumeTask } from "./orchestrator.js";
+import { resumeTask, runTask } from "./orchestrator.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -113,5 +113,47 @@ describe("resumeTask 断点续跑（M31）", () => {
     // 无断点 → 走全新路径：重置 + 按 plan 插入步骤
     expect(mocks.resetTask).toHaveBeenCalled();
     expect(mocks.insertStep).toHaveBeenCalled();
+  });
+});
+
+describe("C2 模板字段真正生效", () => {
+  beforeEach(() => {
+    mocks.planTask.mockImplementation(async () => ({
+      steps: [{ title: "理解需求" }, { title: "生成成果" }, { title: "校验交付" }],
+      viaLLM: false,
+      model: "内置计划器",
+    }));
+    mocks.runContentPipeline.mockImplementation(async () => ({
+      sections: [{ title: "s", paragraphs: ["x"] }],
+      agents: { analyst: false, writer: false, editor: false },
+    }));
+    mocks.getActiveSpace.mockReturnValue(undefined);
+  });
+
+  it("runTask 带 opts 时把 modelHint 传给 planTask、且 expert/skills 落进任务", async () => {
+    mocks.insertTask.mockClear();
+    mocks.planTask.mockClear();
+    await runTask("c2t", "做一份模板任务", "user1", {
+      expert: "财经分析师",
+      skills: ["Excel", "数据可视化"],
+      modelHint: "DeepSeek · deepseek-chat",
+    });
+
+    // modelHint 已传到规划器（驱动渠道偏好）
+    const planArg = mocks.planTask.mock.calls[0][1];
+    expect(planArg).toBe("DeepSeek · deepseek-chat");
+
+    // expert/skills 真正写进任务记录（不再硬编码默认值）
+    const taskArg = mocks.insertTask.mock.calls[0][0];
+    expect(taskArg.expert).toBe("财经分析师");
+    expect(taskArg.skills).toEqual(["Excel", "数据可视化"]);
+  });
+
+  it("runTask 不带 opts 时回落默认 expert/skills", async () => {
+    mocks.insertTask.mockClear();
+    await runTask("c2t2", "普通任务", undefined);
+    const taskArg = mocks.insertTask.mock.calls[0][0];
+    expect(taskArg.expert).toBe("数据分析师");
+    expect(taskArg.skills).toEqual(["文件生成"]);
   });
 });

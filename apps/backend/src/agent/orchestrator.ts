@@ -8,6 +8,14 @@ import {
 import { publish } from "./events";
 import { planTask } from "./planner";
 import { genOffice, detectKind, type StepContent, type OfficeKind } from "../tools/office";
+
+/** C2：任务创建时的可选 Agent 配置——由模板/前端带入，让 expert/skills/model 真正落进任务与路由 */
+export interface AgentOptions {
+  expert?: string;
+  skills?: string[];
+  /** 偏好的模型（模板指定），用于路由时把匹配渠道提前（非排他） */
+  modelHint?: string;
+}
 import { defaultTool } from "../tools/registry";
 import { runContentPipeline } from "./pipeline";
 import { verifyWithRetry } from "./verifier";
@@ -54,8 +62,9 @@ async function runPlanSteps(opts: {
   startIdx: number;
   sections: StepContent[];
   task: Task;
+  modelHint?: string;
 }): Promise<void> {
-  const { id, userId, plan, stepIds, kind, startIdx, sections, task } = opts;
+  const { id, userId, plan, stepIds, kind, startIdx, sections, task, modelHint } = opts;
   const log = taskLogger(id);
 
   // 若从断点开局，前面 done 的步骤已算作"理解需求中"，先同步 checks 基态
@@ -97,7 +106,7 @@ async function runPlanSteps(opts: {
       // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word），注入各步结果，带验收重试（最多 3 次）
       const dir = resolveWorkDir();
       // M10b：多 Agent 内容管线（分析师 → 写手 → 校验），LLM 可用时真内容，否则脚本降级
-      const { sections: contentSections, agents } = await runContentPipeline(task.prompt, plan, kind);
+      const { sections: contentSections, agents } = await runContentPipeline(task.prompt, plan, kind, modelHint);
       const anyLLM = agents.analyst || agents.writer || agents.editor;
       const { name, kind: fKind } = await verifyWithRetry(
         () => genOffice(task.prompt, plan, dir, contentSections), 3,
@@ -144,20 +153,22 @@ function finishTask(id: string, task: Task): Task {
   return saved ?? task;
 }
 
-export async function runTask(id: string, prompt: string, userId?: string): Promise<Task> {
+export async function runTask(id: string, prompt: string, userId?: string, opts?: AgentOptions): Promise<Task> {
   const log = taskLogger(id); // 用任务 ID 贯穿编排全过程日志
   const title = prompt.slice(0, 20) || "未命名任务";
   const created = new Date().toLocaleString("zh-CN", { hour12: false });
 
-  // 规划：优先 LLM 拆真步骤，失败降级脚本
-  const { steps: planned, model } = await planTask(prompt);
+  // 规划：优先 LLM 拆真步骤，失败降级脚本；模板可给 modelHint 偏好的模型
+  const { steps: planned, model } = await planTask(prompt, opts?.modelHint);
   log.info({ userId, plan: planned.map((p) => p.title), model }, "task started");
   const plan = planned.map((p) => p.title);
   const modelUsed = model;
 
   const task: Task = {
-    id, title, prompt, status: "queue", model: modelUsed, expert: "数据分析师",
-    skills: ["文件生成"], workspace: "默认工作空间",
+    id, title, prompt, status: "queue", model: modelUsed,
+    expert: opts?.expert || "数据分析师",
+    skills: opts?.skills?.length ? opts.skills : ["文件生成"],
+    workspace: "默认工作空间",
     steps: [],
     artifacts: [],
     deliverable: null,
@@ -186,7 +197,7 @@ export async function runTask(id: string, prompt: string, userId?: string): Prom
   publish({ type: "step", taskId: id, data: { stepId: stepIds[0], status: "running" } });
 
   // M30 后并发由 runner 管；压缩 sleep 反馈清晰
-  await runPlanSteps({ id, userId, plan, stepIds, kind: detectKind(prompt), startIdx: 0, sections: [], task });
+  await runPlanSteps({ id, userId, plan, stepIds, kind: detectKind(prompt), startIdx: 0, sections: [], task, modelHint: opts?.modelHint });
   return finishTask(id, task);
 }
 

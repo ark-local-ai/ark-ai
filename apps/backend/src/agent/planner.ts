@@ -68,14 +68,19 @@ function scriptedPlan(prompt: string): PlannedStep[] {
 }
 
 // ---- LLM 拆解（JSON 输出，失败即抛 → 上层 catch 降级）----
-async function llmPlan(prompt: string): Promise<{ steps: PlannedStep[]; model: string }> {
+async function llmPlan(prompt: string, modelHint?: string): Promise<{ steps: PlannedStep[]; model: string }> {
   const sys =
     "你是任务规划器。把用户的一句话需求拆成3~6个有序执行步骤。严格只输出 JSON 数组，每项 {\"title\":\"步骤标题\",\"note\":\"该步要做什么或产出什么\"}，不要输出其它文字。";
   // M14：多渠道 failover——按成功率逐个尝试，直到某渠道成功（成功/失败自动记统计）
-  const { text, channel, model } = await chatWithFailover([
-    { role: "system", content: sys },
-    { role: "user", content: prompt },
-  ]);
+  // C2：模板可带 modelHint（偏好的模型，非排他），命中渠道优先尝试
+  const { text, channel, model } = await chatWithFailover(
+    [
+      { role: "system", content: sys },
+      { role: "user", content: prompt },
+    ],
+    {},
+    modelHint,
+  );
   const arr = JSON.parse(text) as { title?: string; note?: string }[];
   if (!Array.isArray(arr) || !arr.length) throw new Error("LLM 未返回有效步骤");
   const steps = arr
@@ -85,15 +90,16 @@ async function llmPlan(prompt: string): Promise<{ steps: PlannedStep[]; model: s
   return { steps, model: `${channel} · ${model}` };
 }
 
-/** 主入口：优先 LLM，失败降级脚本。暴露 viaLLM / model 供编排层标记。 */
-export async function planTask(prompt: string): Promise<{
+/** 主入口：优先 LLM，失败降级脚本。暴露 viaLLM / model 供编排层标记。
+ *  C2：modelHint=模板偏好的模型（传染给 llmPlan 的 failover 排序）。 */
+export async function planTask(prompt: string, modelHint?: string): Promise<{
   steps: PlannedStep[];
   viaLLM: boolean;
   model: string;
 }> {
   try {
     await sleep(300); // 让前端先收到 plan 前能显示"规划中"
-    const { steps, model } = await llmPlan(prompt);
+    const { steps, model } = await llmPlan(prompt, modelHint);
     return { steps, viaLLM: true, model };
   } catch {
     return { steps: scriptedPlan(prompt), viaLLM: false, model: "内置计划器" };

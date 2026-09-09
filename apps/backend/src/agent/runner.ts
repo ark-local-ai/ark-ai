@@ -9,7 +9,7 @@
 // 注：不做"整体超时"——单靠 race 超时无法取消底下仍在跑的 runTask，它稍后完成会把 failed
 // 又覆盖回 done，造成错误终态。超时应在各子调用内做（LLM 调用已有 timeout），这里不叠加。
 
-import { runTask, resumeTask } from "./orchestrator";
+import { runTask, resumeTask, type AgentOptions } from "./orchestrator";
 import { updateTaskStatus, getUnfinishedTasks } from "../db/store";
 import { publish } from "./events";
 import { taskLogger } from "../util/log";
@@ -47,7 +47,7 @@ function release(): void {
 }
 
 /** 执行单个任务，带失败兜底；绝不向外抛（保证队列不断）。resume=true 时走断点续跑（M31）。 */
-async function execute(id: string, prompt: string, userId?: string, resume = false): Promise<void> {
+async function execute(id: string, prompt: string, userId?: string, resume = false, opts?: AgentOptions): Promise<void> {
   const log = taskLogger(id);
   log.info({ prompt: prompt.slice(0, 30), userId, concurrency: MAX_CONCURRENCY, resume }, "task execution started");
   await acquire();
@@ -55,7 +55,7 @@ async function execute(id: string, prompt: string, userId?: string, resume = fal
     if (resume) {
       await resumeTask(id, prompt, userId);
     } else {
-      await runTask(id, prompt, userId);
+      await runTask(id, prompt, userId, opts);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -78,10 +78,10 @@ async function execute(id: string, prompt: string, userId?: string, resume = fal
 
 /**
  * 入队任务（POST 立即返回 taskId 的语义不变）：受控并发执行，失败自动兜底。
- * 用 `void` 调用即可，内部自吞错误。
+ * 用 `void` 调用即可，内部自吞错误。opts（C2）可带 expert/skills/modelHint。
  */
-export function enqueueTask(id: string, prompt: string, userId?: string): void {
-  execute(id, prompt, userId);
+export function enqueueTask(id: string, prompt: string, userId?: string, opts?: AgentOptions): void {
+  execute(id, prompt, userId, false, opts);
 }
 
 /** M31：以「断点续跑」方式入队（复用已持久化的已完步骤，只重跑余下部分） */

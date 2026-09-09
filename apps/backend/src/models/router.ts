@@ -178,22 +178,37 @@ export { getDefaultChannel };
 
 import { chat, type ChatMessage, type ChatOptions } from "./client";
 
-/** 渠道按综合评分从高到低排序（可靠性+延迟+成本+优先级），排除当前被熔断短路的渠道 */
-function orderedChannels(): Channel[] {
+/** 渠道按综合评分从高到低排序（可靠性+延迟+成本+优先级），排除当前被熔断短路的渠道。
+ *  若给 modelHint（如模板指定的模型/渠道名），则命中的渠道提到最前（偏好，非排他）——找不到仍回退全渠道。 */
+function orderedChannels(modelHint?: string): Channel[] {
+  const hint = modelHint?.trim().toLowerCase();
   return getChannels()
     .filter((c) => !isChannelOpen(c.id))
-    .sort((a, b) => channelScore(b, readStat(b.id)) - channelScore(a, readStat(a.id)));
+    .sort((a, b) => {
+      const hit = (c: Channel) =>
+        !!hint && (
+          c.name.toLowerCase().includes(hint) ||
+          c.model.toLowerCase().includes(hint) ||
+          hint.includes(c.model.toLowerCase())
+        );
+      const aHit = hit(a) ? 1 : 0;
+      const bHit = hit(b) ? 1 : 0;
+      if (aHit !== bHit) return bHit - aHit;
+      return channelScore(b, readStat(b.id)) - channelScore(a, readStat(a.id));
+    });
 }
 
 /**
- * 依次尝试所有渠道直到一次成功（非流式）。按成功率从高到低。
+ * 依次尝试所有渠道直到一次成功（非流式）。按成功率从高到低；
+ * 传 modelHint 时优先尝试模型匹配的渠道（仍是偏好而非排他）。
  * 至少一次成功返回该渠道与文本；全部失败抛最后一次错误（上层决定降级）。
  */
 export async function chatWithFailover(
   messages: ChatMessage[],
   opts: ChatOptions = {},
+  modelHint?: string,
 ): Promise<{ text: string; channel: string; model: string }> {
-  const channels = orderedChannels();
+  const channels = orderedChannels(modelHint);
   if (!channels.length) throw new Error("无可用渠道");
   let lastErr: unknown = new Error("无可用渠道");
   for (const c of channels) {

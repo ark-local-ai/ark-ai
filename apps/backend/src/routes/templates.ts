@@ -61,11 +61,16 @@ export async function templateRoutes(app: FastifyInstance) {
   });
 
   // 应用模板：以模板的提示词创建并启动一个真实任务（与首页建任务同管线）
+  // C2：模板的 expert/skills/model 真正生效——经 AgentOptions 传入编排列成任务与渠道偏好
   app.post<{ Params: { id: string } }>("/:id/run", async (req, reply) => {
     const t = getTaskTemplate((req.params as { id: string }).id);
     if (!t) return reply.code(404).send({ error: "模板不存在" });
     const taskId = randomUUID().slice(0, 8);
-    enqueueTask(taskId, t.prompt, currentUser(req)?.id);
+    enqueueTask(taskId, t.prompt, currentUser(req)?.id, {
+      expert: t.expert,
+      skills: t.skills,
+      modelHint: t.model,
+    });
     return reply.code(201).send({ taskId });
   });
 }
