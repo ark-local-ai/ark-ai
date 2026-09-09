@@ -11,6 +11,7 @@ import { genOffice, detectKind, type StepContent } from "../tools/office";
 import { defaultTool } from "../tools/registry";
 import { runContentPipeline } from "./pipeline";
 import { verifyWithRetry } from "./verifier";
+import { taskLogger } from "../util/log";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -32,11 +33,13 @@ function resolveWorkDir(): string {
  * M10：中间步骤不再只是"等待"，而是真正走工具产出，交付内容不再全占位。
  */
 export async function runTask(id: string, prompt: string, userId?: string): Promise<Task> {
+  const log = taskLogger(id); // 用任务 ID 贯穿编排全过程日志
   const title = prompt.slice(0, 20) || "未命名任务";
   const created = new Date().toLocaleString("zh-CN", { hour12: false });
 
   // 规划：优先 LLM 拆真步骤，失败降级脚本
   const { steps: planned, model } = await planTask(prompt);
+  log.info({ userId, plan: planned.map((p) => p.title), model }, "task started");
   const plan = planned.map((p) => p.title);
   const modelUsed = model;
 
@@ -129,6 +132,7 @@ export async function runTask(id: string, prompt: string, userId?: string): Prom
       };
       insertArtifact(deliver, id, 1);
       task.deliverable = deliver;
+      log.info({ deliverable: deliver.name }, "task deliverable created");
       publish({ type: "deliver", taskId: id, data: deliver });
     }
 
@@ -149,6 +153,7 @@ export async function runTask(id: string, prompt: string, userId?: string): Prom
   task.steps.forEach((s) => (s.status = "done"));
   const now = new Date().toTimeString().slice(0, 5);
   task.timeline.push({ time: now, label: "执行完成" });
+  log.info({ status: "done" }, "task finished");
   publish({ type: "check", taskId: id, data: task.checks });
   publish({ type: "done", taskId: id, data: { taskId: id } });
 

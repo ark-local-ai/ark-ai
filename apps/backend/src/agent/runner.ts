@@ -9,12 +9,15 @@
 import { runTask } from "./orchestrator";
 import { updateTaskStatus, getUnfinishedTasks } from "../db/store";
 import { publish } from "./events";
+import { taskLogger } from "../util/log";
 
 // 串行队列：tail 是上一条任务的 Promise，新任务接在其后，保证同一时刻只跑一个任务。
 let tail: Promise<void> = Promise.resolve();
 
 /** 执行单个任务，带失败兜底；绝不向外抛（保证队列链不断） */
 async function execute(id: string, prompt: string, userId?: string): Promise<void> {
+  const log = taskLogger(id);
+  log.info({ prompt: prompt.slice(0, 30), userId }, "task execution started");
   try {
     await runTask(id, prompt, userId);
   } catch (err) {
@@ -22,6 +25,7 @@ async function execute(id: string, prompt: string, userId?: string): Promise<voi
     // 幂等安抚：即使已部分执行，也确保落在 failed + 广播 error，前端任务页能感知并停止等待
     try {
       updateTaskStatus(id, "failed");
+      log.error({ err: message, status: "failed" }, "task failed");
       publish({
         type: "error",
         taskId: id,

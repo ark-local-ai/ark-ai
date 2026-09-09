@@ -21,12 +21,16 @@ import { searchWorkspaceFiles } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
 import { pruneSessions } from "./db/store.js";
 import { resumeUnfinishedTasks } from "./agent/runner.js";
+import { loggerOptions } from "./util/log.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workDir = join(__dirname, "..", "..", "frontend", "public", "workspace");
 
 export async function buildApp() {
-  const app = Fastify({ logger: process.env.ARK_TEST ? false : true });
+  // 用共享 logger 配置，让 HTTP 请求日志带 service 常驻字段。
+  // Fastify 默认已为每个请求生成唯一 reqId（req.log 可用），无需自定义。
+  const app = Fastify({ logger: loggerOptions });
+
 
   app.register(cors, { origin: true });
 
