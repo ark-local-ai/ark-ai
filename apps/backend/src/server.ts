@@ -16,6 +16,7 @@ import { authRoutes } from "./routes/auth.js";
 import { statsRoutes } from "./routes/stats.js";
 import { chatSessionRoutes } from "./routes/chat-sessions.js";
 import { scanWorkspace } from "./tools/workspace.js";
+import { searchWorkspaceFiles } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
 import { pruneSessions } from "./db/store.js";
 
@@ -50,6 +51,12 @@ export async function buildApp() {
       return scanWorkspace(dir);
     }
     return scanWorkspace(workDir);
+  });
+
+  // 工作空间全文搜索（M20）：/api/workspace/search?q=<子串>（须在 /* 通配前注册，否则被当静态文件命中）
+  app.get("/api/workspace/search", async (req) => {
+    const q = (req.query as { q?: string }).q ?? "";
+    return searchWorkspaceFiles(q);
   });
 
   // 工作空间静态文件（成果下载）：?space=<id> 支持从空间子目录取

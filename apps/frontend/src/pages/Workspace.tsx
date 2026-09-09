@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ftColor, ftLabel } from "../data/mock";
 import {
   listSpaces, listSpaceFiles, createSpace, setActiveSpace, deleteSpace,
-  workspaceUrl, type SpaceDto, type WorkspaceFileDto,
+  workspaceUrl, searchWorkspace, type SpaceDto, type WorkspaceFileDto, type WorkspaceSearchResult,
 } from "../api";
 
 export default function Workspace() {
@@ -69,6 +69,16 @@ export default function Workspace() {
   // 成果网格：官方交付文件（Office/pdf/md/html）按类型分组
   const grid = useMemo(() => (files ?? []).filter((f) => f.kind !== "other"), [files]);
 
+  // M20 全文搜索：跨全部工作空间按文件名 FTS 子串匹配
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<WorkspaceSearchResult[] | null>(null);
+  const doSearch = (kw: string) => {
+    const v = kw.trim();
+    setQ(v);
+    if (!v) { setHits(null); return; }
+    searchWorkspace(v).then(setHits).catch(() => setHits([]));
+  };
+
   return (
     <div className="page">
       <div className="workspace-wrap">
@@ -121,12 +131,33 @@ export default function Workspace() {
         </div>
 
         <div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <b style={{ fontSize: 15 }}>成果文件 · {active?.name ?? "默认工作空间"}</b>
             <span style={{ fontSize: 12, color: "var(--text-3)" }}>真实落盘 · 可直接在 Office 打开继续编辑</span>
-            <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => loadFiles(activeId)}>刷新</button>
+            <div className="ws-search" style={{ marginLeft: "auto" }}>
+              <input placeholder="全文搜索文件名…" value={q}
+                onChange={(e) => doSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && doSearch("")} />
+              {q && <button className="ws-clear" onClick={() => doSearch("")}>×</button>}
+            </div>
+            <button className="btn ghost sm" onClick={() => loadFiles(activeId)}>刷新</button>
           </div>
-          {err ? (
+          {q.trim() ? (
+            /* M20：FTS 搜索结果（跨全部空间） */
+            <div className="files-grid">
+              {hits && hits.length === 0 && <div className="empty">未找到匹配文件</div>}
+              {hits?.map((f, i) => (
+                <div key={i} className="file-card card">
+                  <div className="ftext" style={{ background: ftColor[f.kind] }}>{ftLabel(f.kind)}</div>
+                  <div className="fname" title={f.name}>{f.name}</div>
+                  <div className="fmeta">{f.sizeText} · {f.time} · {f.spaceName}</div>
+                  <div className="fops">
+                    <a className="btn soft sm" href={workspaceUrl(f.name, f.spaceId ?? undefined)} download>下载</a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : err ? (
             <div className="empty" style={{ color: "var(--warn)" }}>
               无法连接后端（127.0.0.1:4000），请先启动 apps/backend
             </div>

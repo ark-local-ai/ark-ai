@@ -7,7 +7,7 @@ import {
   ArkLogo, IconCollapse,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
-import { listTasks, deleteTask, retryTask, listSpaces, createSpace, setActiveSpace, deleteSpace, getAuthStatus, type SpaceDto, type AuthUser } from "../api";
+import { listTasks, deleteTask, retryTask, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult } from "../api";
 import AuthModal from "../components/AuthModal";
 
 type Mode = "task" | "space";
@@ -34,6 +34,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const [findOpen, setFindOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [fileHits, setFileHits] = useState<WorkspaceSearchResult[]>([]);
   const [fold, setFold] = useState<Record<string, boolean>>({});
   const [delTarget, setDelTarget] = useState<null | { kind: "task" | "space"; id: string }>(null);
   const [ctxMenu, setCtxMenu] = useState<null | { kind: "task" | "space"; id: string; x: number; y: number; title: string }>(null);
@@ -80,6 +81,14 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
     () => tasks.filter((t) => t.title.toLowerCase().includes(kw)),
     [kw],
   );
+
+  // M20：Cmd+K 同时搜工作空间文件（FTS）——搜索弹板打开且有输入时拉取
+  useEffect(() => {
+    if (!findOpen || !kw) { setFileHits([]); return; }
+    let stale = false;
+    searchWorkspace(q.trim()).then((h) => { if (!stale) setFileHits(h); }).catch(() => { if (!stale) setFileHits([]); });
+    return () => { stale = true; };
+  }, [findOpen, kw, q]);
 
   const openTask = () => { setFindOpen(false); setMenuOpen(false); nav("/app/task"); };
 
@@ -317,7 +326,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
           <div className="sb-search-pop">
             <div className="sb-search-input">
               <IconSearch size={16} />
-              <input autoFocus placeholder="搜索任务…" value={q}
+              <input autoFocus placeholder="搜索任务或文件…" value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => e.key === "Escape" && setFindOpen(false)} />
             </div>
@@ -326,6 +335,18 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               {matched.map((t) => <Row key={t.id} title={t.title} time={t.time} onClick={openTask} />)}
               {matched.length === 0 && <div className="sb-pop-empty">没有找到相关任务</div>}
             </div>
+            {kw && (
+              <>
+                <div className="sb-pop-sub">工作空间文件</div>
+                <div className="sb-pop-list">
+                  {fileHits.map((f) => (
+                    <Row key={`${f.spaceName}/${f.name}`} title={f.name} time={`${f.spaceName} · ${f.sizeText}`}
+                      onClick={() => { setFindOpen(false); setMenuOpen(false); nav("/app/workspace"); }} />
+                  ))}
+                  {fileHits.length === 0 && <div className="sb-pop-empty">没有找到匹配文件</div>}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

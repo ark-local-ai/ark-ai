@@ -208,3 +208,17 @@
 .stat-tl li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
 .stt-title { flex: 1; font-size: 13px; color: var(--text-1); }
 .stt-time { font-size: 12px; color: var(--text-3); }
+
+/* ===== 工作空间全文搜索（M20）===== */
+.ws-search { position: relative; display: inline-flex; align-items: center; }
+.ws-search input {
+  width: 220px; padding: 6px 26px 6px 10px; font-size: 12.5px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text-1); outline: none;
+}
+.ws-search input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.ws-clear {
+  position: absolute; right: 7px; border: none; background: none; cursor: pointer;
+  color: var(--text-3); font-size: 15px; line-height: 1;
+}
+.ws-clear:hover { color: var(--danger); }

@@ -82,6 +82,24 @@ export async function listWorkspace(spaceId?: string): Promise<WorkspaceFileDto[
   return res.json();
 }
 
+// ===== 工作空间全文搜索（M20，FTS5）=====
+export interface WorkspaceSearchResult {
+  name: string;
+  kind: string;
+  size: number;
+  sizeText: string;
+  time: string;
+  space: string;
+  spaceName: string;
+  spaceId: string | null;
+}
+
+export async function searchWorkspace(q: string): Promise<WorkspaceSearchResult[]> {
+  const res = await fetch(`${BASE}/api/workspace/search?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`搜索工作空间失败: ${res.status}`);
+  return res.json();
+}
+
 // ===== 多工作空间（spaces）=====
 export interface SpaceDto {
   id: string;
