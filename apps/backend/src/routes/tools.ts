@@ -3,6 +3,8 @@
 
 import type { FastifyInstance } from "fastify";
 import { webRead } from "../tools/web";
+import { searchKnowledge } from "../tools/knowledge";
+import { currentUser } from "./auth";
 
 export interface ToolInfo {
   name: string;
@@ -21,6 +23,12 @@ export async function toolRoutes(app: FastifyInstance) {
         ready: true,
         kind: "read",
       },
+      {
+        name: "search.knowledge",
+        describe: "检索本地知识（记忆 + 工作空间文件名），返回相关片段，RAG-lite、多用户隔离",
+        ready: true,
+        kind: "search",
+      },
     ];
   });
 
@@ -30,6 +38,14 @@ export async function toolRoutes(app: FastifyInstance) {
     if (!url) return reply.code(400).send({ error: "url 必填" });
     const result = await webRead(url, { maxLength: req.body?.maxLength });
     if (result.error) return reply.code(502).send(result);
+    return reply.send(result);
+  });
+
+  // 真工具调用入口：POST /api/tools/search.knowledge { query, limit? }
+  app.post<{ Body: { query?: string; limit?: number } }>("/search.knowledge", async (req, reply) => {
+    const query = (req.body?.query ?? "").trim();
+    if (!query) return reply.code(400).send({ error: "query 必填" });
+    const result = await searchKnowledge(query, currentUser(req)?.id, req.body?.limit ?? 8);
     return reply.send(result);
   });
 }
