@@ -49,6 +49,7 @@ function labelFor(method: string, url: string): string {
   if (u.startsWith("/api/memories") && m === "POST") return "创建记忆";
   if (u.startsWith("/api/memories") && m === "PUT") return "编辑记忆";
   if (u.startsWith("/api/memories") && m === "DELETE") return "删除记忆";
+  if (u.startsWith("/api/tools/web.read") && m === "POST") return "网页读取工具调用";
   if (u.startsWith("/api/jobs") && m === "POST" && u.includes("/run")) return "手动执行任务";
   if (u.startsWith("/api/jobs") && m === "POST") return "新建定时任务";
   if (u.startsWith("/api/jobs") && m === "PUT") return "编辑定时任务";

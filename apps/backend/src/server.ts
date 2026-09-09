@@ -23,6 +23,7 @@ import { maintenanceRoutes } from "./routes/maintenance.js";
 import { templateRoutes } from "./routes/templates.js";
 import { versionRoutes } from "./routes/versions.js";
 import { memoryRoutes } from "./routes/memories.js";
+import { toolRoutes } from "./routes/tools.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { searchWorkspaceFiles } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
@@ -65,6 +66,7 @@ export async function buildApp() {
   app.register(templateRoutes, { prefix: "/api/templates" });
   app.register(versionRoutes, { prefix: "/api/versions" });
   app.register(memoryRoutes, { prefix: "/api/memories" });
+  app.register(toolRoutes, { prefix: "/api/tools" });
 
   // 工作空间列表：?space=<id> 指定空间目录，缺省扫根（默认工作空间）
   app.get("/api/workspace", async (req) => {
