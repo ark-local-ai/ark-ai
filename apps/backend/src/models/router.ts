@@ -44,11 +44,13 @@ function writeStat(id: string, s: Stat): void {
 export function recordSuccess(id: string): void {
   const s = readStat(id);
   writeStat(id, { ok: s.ok + 1, fail: s.fail, latencySum: s.latencySum, latencyN: s.latencyN });
+  breakerReset(id); // 成功 → 熔断器关闭复位
 }
 
 export function recordFailure(id: string): void {
   const s = readStat(id);
   writeStat(id, { ok: s.ok, fail: s.fail + 1, latencySum: s.latencySum, latencyN: s.latencyN });
+  breakerFail(id); // 计数连续失败，达到阈值 → 熔断 open
 }
 
 /** 记录一次成功调用的耗时（ms），用于计算平均延迟 */
@@ -56,6 +58,51 @@ export function recordLatency(id: string, ms: number): void {
   const s = readStat(id);
   writeStat(id, { ok: s.ok, fail: s.fail, latencySum: s.latencySum + ms, latencyN: s.latencyN + 1 });
 }
+
+// ===== 多渠道熔断器（M27） =====
+// 单纯 failover（M14）只做到"失败就换渠道"，但一个持续故障的渠道仍会被反复尝试、每次都空耗
+// 到超时，拖慢整体。熔断器在连续失败达到阈值后"打开"，一段时间内直接短路跳过该渠道，
+// 冷却期后（half-open）放一个试探请求，成功则恢复、失败则继续保持打开。
+// 状态是内存瞬时态（不需要落库——重启后从持久化的 ok/fail 统计重新评估），因此测试友好。
+
+const BREAKER_THRESHOLD = 5; // 连续失败 5 次触发熔断
+const BREAKER_COOLDOWN_MS = 10_000; // 打开后冷却 10s，之后允许 half-open 探测
+
+interface Breaker { failures: number; open: boolean; openedAt: number }
+const breakers = new Map<string, Breaker>();
+
+/** 某渠道是否当前被熔断短路（open 且未过冷却期）。过半开放期(half-open)放行，用于探测。 */
+export function isChannelOpen(id: string): boolean {
+  const b = breakers.get(id);
+  if (!b || !b.open) return false;
+  // 冷却期已过 → 转 half-open，允许一次探测（调用成功即复位）
+  if (Date.now() - b.openedAt >= BREAKER_COOLDOWN_MS) return false;
+  return true;
+}
+
+/** 记录一次失败：连续失败计数，达到阈值打开熔断器 */
+function breakerFail(id: string): void {
+  const b = breakers.get(id) ?? { failures: 0, open: false, openedAt: 0 };
+  if (b.open) {
+    // half-open 探测失败 → 重新打开，重置冷却计时，避免反复试探刚失败的渠道
+    b.openedAt = Date.now();
+    breakers.set(id, b);
+    return;
+  }
+  b.failures += 1;
+  if (b.failures >= BREAKER_THRESHOLD) {
+    b.open = true;
+    b.openedAt = Date.now();
+    b.failures = 0;
+  }
+  breakers.set(id, b);
+}
+
+/** 记录一次成功：关闭熔断器、复位连续失败计数 */
+function breakerReset(id: string): void {
+  breakers.delete(id);
+}
+
 
 function successRate(s: Stat): number {
   const total = s.ok + s.fail;
@@ -77,9 +124,9 @@ export function channelScore(c: Channel, s: Stat): number {
   return reliability * 0.5 + latencyScore * 0.2 + costScore * 0.15 + priorityScore * 0.15;
 }
 
-/** 按综合评分选最优渠道；完全没有渠道返回 null（调用方降级脚本） */
+/** 按综合评分选最优渠道（跳过当前被熔断短路的渠道）；无可用渠道返回 null（调用方降级脚本） */
 export function pickChannel(): Channel | null {
-  const channels = getChannels();
+  const channels = getChannels().filter((c) => !isChannelOpen(c.id));
   if (!channels.length) return null;
 
   let best = channels[0];
@@ -131,9 +178,11 @@ export { getDefaultChannel };
 
 import { chat, type ChatMessage, type ChatOptions } from "./client";
 
-/** 渠道按综合评分从高到低排序（可靠性+延迟+成本+优先级） */
+/** 渠道按综合评分从高到低排序（可靠性+延迟+成本+优先级），排除当前被熔断短路的渠道 */
 function orderedChannels(): Channel[] {
-  return getChannels().sort((a, b) => channelScore(b, readStat(b.id)) - channelScore(a, readStat(a.id)));
+  return getChannels()
+    .filter((c) => !isChannelOpen(c.id))
+    .sort((a, b) => channelScore(b, readStat(b.id)) - channelScore(a, readStat(a.id)));
 }
 
 /**
