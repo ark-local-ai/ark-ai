@@ -3,8 +3,8 @@
 // 调度器每 30s 检查：到期(每天 HH:MM 或每隔 N 分钟)且启用 → 调 runTask 执行并记日志。
 // 数据全部本机（SQLite），契合「定时任务 + 数据不出本机」。
 
-import { db } from "../db/store";
-import { runTask } from "../agent/orchestrator";
+import { db, getTaskTemplate } from "../db/store";
+import { runTask, type AgentOptions } from "../agent/orchestrator";
 import { runCleanup } from "../maintenance/cleanup.js";
 
 export interface Job {
@@ -127,12 +127,30 @@ function isDue(schedule: string, minuteOfDay: number): boolean {
   return minuteOfDay === parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 }
 
+/** 解析 job.action：普通提示词 或 "template:<id>"（C4：定时跑模板）。返回 {prompt, opts} */
+export function resolveAction(action: string): { prompt: string; opts?: AgentOptions } {
+  const trimmed = (action ?? "").trim();
+  if (trimmed.startsWith("template:")) {
+    const tplId = trimmed.slice("template:".length).trim();
+    const tpl = tplId ? getTaskTemplate(tplId) : null;
+    if (!tpl) return { prompt: "" }; // 模板不存在，跑空提示词（上层会失败并记日志）
+    return {
+      prompt: tpl.prompt,
+      opts: { expert: tpl.expert, skills: tpl.skills, modelHint: tpl.model },
+    };
+  }
+  return { prompt: trimmed };
+}
+
 /** 手动触发一次（也可被调度器调用） */
 export async function runJob(id: string): Promise<boolean> {
   const job = getJob(id);
   if (!job) return false;
+  const taskId = `auto${Date.now().toString(36)}`;
   try {
-    await runTask(`auto${Date.now().toString(36)}`, job.action);
+    const { prompt, opts } = resolveAction(job.action);
+    if (!prompt) throw new Error("模板不存在或已删除");
+    await runTask(taskId, prompt, undefined, opts);
     addLog(job.id, job.name, `成功 · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`, true);
     return true;
   } catch (e) {

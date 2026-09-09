@@ -1,23 +1,34 @@
 import { useEffect, useState } from "react";
 import {
   listJobs, createJob, updateJob, deleteJob, runJobNow, listJobLogs,
-  type JobDto, type JobLogDto,
+  listTemplates, type JobDto, type JobLogDto, type TaskTemplateDto,
 } from "../api";
 
 export default function Automation() {
   const [jobs, setJobs] = useState<JobDto[]>([]);
   const [logs, setLogs] = useState<JobLogDto[]>([]);
+  const [templates, setTemplates] = useState<TaskTemplateDto[]>([]);
   const [err, setErr] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", schedule: "09:00", action: "", push: "" });
+  const [tplId, setTplId] = useState(""); // 选中的模板 id：非空则该 job 跑模板
 
   const load = () => {
     setErr(false);
-    Promise.all([listJobs(), listJobLogs()])
-      .then(([js, ls]) => { setJobs(js); setLogs(ls); })
+    Promise.all([listJobs(), listJobLogs(), listTemplates().catch(() => [] as TaskTemplateDto[])])
+      .then(([js, ls, ts]) => { setJobs(js); setLogs(ls); setTemplates(ts); })
       .catch(() => setErr(true));
   };
   useEffect(load, []);
+
+  // 选择模板 → 把 action 设为 "template:<id>"（C4 定时跑模板），并预填名称
+  const pickTemplate = (id: string) => {
+    setTplId(id);
+    const t = templates.find((x) => x.id === id);
+    if (t) {
+      setForm((f) => ({ ...f, name: f.name || `定时 · ${t.name}`, action: `template:${id}` }));
+    }
+  };
 
   const toggle = async (j: JobDto) => {
     const u = await updateJob(j.id, { enabled: !j.enabled });
@@ -36,6 +47,7 @@ export default function Automation() {
     if (!form.name.trim() || !form.action.trim()) return;
     await createJob({ ...form, name: form.name.trim(), action: form.action.trim(), schedule: form.schedule.trim() || "09:00" });
     setForm({ name: "", schedule: "09:00", action: "", push: "" });
+    setTplId("");
     setCreating(false);
     load();
   };
@@ -56,7 +68,15 @@ export default function Automation() {
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
             <input className="inp" placeholder="触发：每天 09:00 或 every:30（每30分钟）" value={form.schedule}
               onChange={(e) => setForm((f) => ({ ...f, schedule: e.target.value }))} />
+            <select className="inp" value={tplId}
+              onChange={(e) => pickTemplate(e.target.value)}>
+              <option value="">执行动作：用自己的提示词（下方填写）</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>跑模板：{t.name}</option>
+              ))}
+            </select>
             <input className="inp" placeholder="执行动作（一句话需求），如：汇总昨日任务生成晨报" value={form.action}
+              disabled={!!tplId}
               onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))} />
             <input className="inp" placeholder="推送到（可选），如：企业微信群" value={form.push}
               onChange={(e) => setForm((f) => ({ ...f, push: e.target.value }))} />
