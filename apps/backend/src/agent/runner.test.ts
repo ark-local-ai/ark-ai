@@ -2,14 +2,15 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   runTask: vi.fn(),
+  resumeTask: vi.fn(),
   updateTaskStatus: vi.fn(),
   publish: vi.fn(),
   getUnfinishedTasks: vi.fn<() => { id: string; prompt: string; userId?: string; status: string }[]>(() => []),
 }));
 
-// 用 mock 替换真实 runTask/updateTaskStatus/publish，只测 runner 的队列语义与失败兜底，
+// 用 mock 替换真实 runTask/resumeTask/updateTaskStatus/publish，只测 runner 的队列语义与失败兜底，
 // 避免触发真实 Office 文件生成（慢、写盘、非幂等）。
-vi.mock("./orchestrator.js", () => ({ runTask: mocks.runTask }));
+vi.mock("./orchestrator.js", () => ({ runTask: mocks.runTask, resumeTask: mocks.resumeTask }));
 vi.mock("../db/store.js", () => ({
   updateTaskStatus: mocks.updateTaskStatus,
   getUnfinishedTasks: mocks.getUnfinishedTasks,
@@ -82,16 +83,18 @@ describe("runner 队列（并发控制 M30）", () => {
     );
   });
 
-  it("resumeUnfinishedTasks 重新入队遗留任务并保持 user_id", async () => {
+  it("resumeUnfinishedTasks 走断点续跑（resumeTask）并保持 user_id（M31）", async () => {
     mocks.getUnfinishedTasks.mockReturnValue([
       { id: "q1", prompt: "p1", userId: "alice", status: "queue" },
       { id: "r1", prompt: "p2", userId: undefined, status: "running" },
     ]);
     resumeUnfinishedTasks();
     await sleep(50);
-    expect(mocks.runTask).toHaveBeenCalledTimes(2);
-    expect(mocks.runTask).toHaveBeenCalledWith("q1", "p1", "alice");
-    expect(mocks.runTask).toHaveBeenCalledWith("r1", "p2", undefined);
+    // M31：重启恢复走 resumeTask（复用已完步骤），不再走 runTask（从零重跑）
+    expect(mocks.resumeTask).toHaveBeenCalledTimes(2);
+    expect(mocks.resumeTask).toHaveBeenCalledWith("q1", "p1", "alice");
+    expect(mocks.resumeTask).toHaveBeenCalledWith("r1", "p2", undefined);
+    expect(mocks.runTask).not.toHaveBeenCalled();
   });
 });
 

@@ -9,7 +9,7 @@
 // 注：不做"整体超时"——单靠 race 超时无法取消底下仍在跑的 runTask，它稍后完成会把 failed
 // 又覆盖回 done，造成错误终态。超时应在各子调用内做（LLM 调用已有 timeout），这里不叠加。
 
-import { runTask } from "./orchestrator";
+import { runTask, resumeTask } from "./orchestrator";
 import { updateTaskStatus, getUnfinishedTasks } from "../db/store";
 import { publish } from "./events";
 import { taskLogger } from "../util/log";
@@ -46,13 +46,17 @@ function release(): void {
   }
 }
 
-/** 执行单个任务，带失败兜底；绝不向外抛（保证队列不断） */
-async function execute(id: string, prompt: string, userId?: string): Promise<void> {
+/** 执行单个任务，带失败兜底；绝不向外抛（保证队列不断）。resume=true 时走断点续跑（M31）。 */
+async function execute(id: string, prompt: string, userId?: string, resume = false): Promise<void> {
   const log = taskLogger(id);
-  log.info({ prompt: prompt.slice(0, 30), userId, concurrency: MAX_CONCURRENCY }, "task execution started");
+  log.info({ prompt: prompt.slice(0, 30), userId, concurrency: MAX_CONCURRENCY, resume }, "task execution started");
   await acquire();
   try {
-    await runTask(id, prompt, userId);
+    if (resume) {
+      await resumeTask(id, prompt, userId);
+    } else {
+      await runTask(id, prompt, userId);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     // 幂等安抚：即使已部分执行，也确保落在 failed + 广播 error，前端任务页能感知并停止等待
@@ -80,6 +84,11 @@ export function enqueueTask(id: string, prompt: string, userId?: string): void {
   execute(id, prompt, userId);
 }
 
+/** M31：以「断点续跑」方式入队（复用已持久化的已完步骤，只重跑余下部分） */
+export function enqueueResume(id: string, prompt: string, userId?: string): void {
+  execute(id, prompt, userId, true);
+}
+
 /** 队列当前状态（供观测/前端展示）：正在执行数、排队数、配置的并发上限 */
 export function getQueueStats(): { active: number; queued: number; concurrency: number } {
   return { active: running, queued: waiters.length, concurrency: MAX_CONCURRENCY };
@@ -93,7 +102,7 @@ export function getQueueStats(): { active: number; queued: number; concurrency: 
 export function resumeUnfinishedTasks(): void {
   const pending = getUnfinishedTasks();
   for (const t of pending) {
-    enqueueTask(t.id, t.prompt, t.userId);
+    enqueueResume(t.id, t.prompt, t.userId);
   }
   if (pending.length > 0) {
     // 用 setImmediate 避免阻塞启动；打印一次，避免刷屏
