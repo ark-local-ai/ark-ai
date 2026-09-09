@@ -196,7 +196,7 @@ export function sendChat(
       const res = await fetch(`${BASE}/api/chat`, {
         method: "POST",
         signal: ctrl.signal,
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
         body: JSON.stringify({ message, history, sessionId }),
       });
       if (!res.ok || !res.body) throw new Error(`chat ${res.status}`);
@@ -301,7 +301,7 @@ export async function getSkill(id: string): Promise<SkillDto> {
 export async function saveSkill(id: string, body: Partial<SkillDto>): Promise<SkillDto> {
   const res = await fetch(`${BASE}/api/skills/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`保存技能失败: ${res.status}`);
@@ -356,7 +356,7 @@ export async function listJobs(): Promise<JobDto[]> {
 export async function createJob(p: { name: string; schedule: string; action: string; push?: string; enabled?: boolean }): Promise<JobDto> {
   const res = await fetch(`${BASE}/api/jobs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(p),
   });
   if (!res.ok) throw new Error(`创建任务失败: ${res.status}`);
@@ -366,7 +366,7 @@ export async function createJob(p: { name: string; schedule: string; action: str
 export async function updateJob(id: string, body: Partial<JobDto>): Promise<JobDto> {
   const res = await fetch(`${BASE}/api/jobs/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`更新任务失败: ${res.status}`);
@@ -374,11 +374,11 @@ export async function updateJob(id: string, body: Partial<JobDto>): Promise<JobD
 }
 
 export async function deleteJob(id: string): Promise<void> {
-  await fetch(`${BASE}/api/jobs/${id}`, { method: "DELETE" });
+  await fetch(`${BASE}/api/jobs/${id}`, { method: "DELETE", headers: authHeaders() });
 }
 
 export async function runJobNow(id: string): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/api/jobs/${id}/run`, { method: "POST" });
+  const res = await fetch(`${BASE}/api/jobs/${id}/run`, { method: "POST", headers: authHeaders() });
   return res.json();
 }
 
@@ -449,7 +449,7 @@ export async function getQueue(): Promise<QueueDto> {
 export async function createChannel(p: { name: string; proto: "openai" | "anthropic"; model: string; baseUrl: string; apiKey?: string }): Promise<ChannelDto> {
   const res = await fetch(`${BASE}/api/channels`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(p),
   });
   if (!res.ok) throw new Error(`新增渠道失败: ${res.status}`);
@@ -459,7 +459,7 @@ export async function createChannel(p: { name: string; proto: "openai" | "anthro
 export async function updateChannel(id: string, body: Partial<ChannelDto>): Promise<ChannelDto> {
   const res = await fetch(`${BASE}/api/channels/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`更新渠道失败: ${res.status}`);
@@ -467,15 +467,15 @@ export async function updateChannel(id: string, body: Partial<ChannelDto>): Prom
 }
 
 export async function deleteChannel(id: string): Promise<void> {
-  await fetch(`${BASE}/api/channels/${id}`, { method: "DELETE" });
+  await fetch(`${BASE}/api/channels/${id}`, { method: "DELETE", headers: authHeaders() });
 }
 
 export async function setDefaultChannel(id: string): Promise<void> {
-  await fetch(`${BASE}/api/channels/${id}/default`, { method: "POST" });
+  await fetch(`${BASE}/api/channels/${id}/default`, { method: "POST", headers: authHeaders() });
 }
 
 export async function testChannel(id: string): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/api/channels/${id}/test`, { method: "POST" });
+  const res = await fetch(`${BASE}/api/channels/${id}/test`, { method: "POST", headers: authHeaders() });
   return res.json();
 }
 

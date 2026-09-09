@@ -17,6 +17,7 @@ import { statsRoutes } from "./routes/stats.js";
 import { chatSessionRoutes } from "./routes/chat-sessions.js";
 import { globalEventsRoutes } from "./routes/events.js";
 import { auditRoutes, installAuditHook } from "./routes/audit.js";
+import { installAuthGate } from "./routes/guard.js";
 import { queueRoutes } from "./routes/queue.js";
 import { maintenanceRoutes } from "./routes/maintenance.js";
 import { templateRoutes } from "./routes/templates.js";
@@ -37,6 +38,8 @@ export async function buildApp() {
 
   // 全局写请求审计钩子（必须在根上下文按装，否则只审到自己的插件路由）
   installAuditHook(app);
+  // C3 认证硬门禁（写请求需登录；根上下文按装，ARK_REQUIRE_AUTH=0 可关）
+  installAuthGate(app);
 
   app.register(cors, { origin: true });
 

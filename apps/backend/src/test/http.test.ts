@@ -2,6 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LightMyRequestResponse } from "fastify";
 import { loadIsolatedStore, makeTask, cleanup } from "../test/helpers";
 
+// C3：默认 http 测试关掉认证硬门禁，保持既有注入用例（auth-gate 单独开立一套验证）
+process.env.ARK_REQUIRE_AUTH = "0";
+
 // buildApp 由 server.ts 提供；其 import 会触发 store/searchIndex 等模块副作用，
 // 但 loadIsolatedStore 已先设好临时 ARK_DB_PATH / ARK_TEST，不会污染真实库、也不会起监听。
 let store: typeof import("../db/store");
@@ -237,5 +240,42 @@ describe("任务另存为模板 API（C1）", () => {
     store.insertTask(run);
     const nope = await post(`/api/tasks/${run.id}/template`, {});
     expect(nope.statusCode).toBe(409);
+  });
+});
+
+describe("C3 认证硬门禁（写请求需登录）", () => {
+  it("匿名写请求 401、带 token 写 201、读请求开放；/api/auth/* 放行", async () => {
+    // 关掉前一个 app 用的 env，重开一套带硬门禁的 app
+    const saved = process.env.ARK_REQUIRE_AUTH;
+    process.env.ARK_REQUIRE_AUTH = "1";
+    const gapp = await buildApp();
+    await gapp.ready();
+    try {
+      // 匿名写 → 401
+      const anon = await gapp.inject({ method: "POST", url: "/api/tasks", payload: { prompt: "xx" } });
+      expect(anon.statusCode).toBe(401);
+
+      // 读请求开放（匿名可看列表，虽然空）
+      const read = await gapp.inject({ method: "GET", url: "/api/tasks" });
+      expect(read.statusCode).toBe(200);
+
+      // auth 端点放行（注册）
+      const reg = await gapp.inject({
+        method: "POST", url: "/api/auth/register",
+        payload: { username: "gate_user", password: "pw1234", displayName: "Gate" },
+      });
+      expect(reg.statusCode).toBe(201);
+      const token: string = reg.json().token;
+
+      // 带 token 写 → 201
+      const authed = await gapp.inject({
+        method: "POST", url: "/api/tasks", payload: { prompt: "做一份报告" },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(authed.statusCode).toBe(201);
+    } finally {
+      await gapp.close();
+      process.env.ARK_REQUIRE_AUTH = saved;
+    }
   });
 });
