@@ -5,6 +5,7 @@
 import { webRead, type WebReadResult } from "./web";
 import { searchKnowledge, type KnowledgeHit } from "./knowledge";
 import { searchWeb, type WebSearchHit } from "./websearch";
+import { renderPage } from "./browser";
 
 export interface PipelineContext {
   web: WebReadResult[];
@@ -46,7 +47,18 @@ export async function gatherContext(prompt: string, userId?: string): Promise<Pi
   const urls = extractUrls(prompt);
   const web: WebReadResult[] = [];
   for (const u of urls) {
-    try { web.push(await webRead(u, { maxLength: 2000 })); } catch { /* 单项失败静默 */ }
+    try {
+      const r = await webRead(u, { maxLength: 2000 });
+      // M49：web.read 抽不到正文（报错或为空，多半是 JS 客户端渲染）→ 用无头浏览器渲染再抽
+      if (r.error || !r.text.trim()) {
+        const br = await renderPage(u, { maxLength: 2000 }).catch(() => null);
+        if (br && !br.error && br.text.trim()) {
+          web.push({ url: u, title: br.title, text: br.text, length: br.text.length });
+          continue;
+        }
+      }
+      web.push(r);
+    } catch { /* 单项失败静默 */ }
   }
   let knowledge: KnowledgeHit[] = [];
   try { knowledge = (await searchKnowledge(prompt, userId, 4)).hits; } catch { /* 静默降级 */ }

@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { webRead } from "../tools/web";
 import { searchKnowledge } from "../tools/knowledge";
 import { searchWeb } from "../tools/websearch";
+import { renderPage } from "../tools/browser";
 import { currentUser } from "./auth";
 
 export interface ToolInfo {
@@ -36,6 +37,12 @@ export async function toolRoutes(app: FastifyInstance) {
         ready: true,
         kind: "search",
       },
+      {
+        name: "browser.render",
+        describe: "无头浏览器渲染 URL 再抽正文（真执行 JS，能拿到 web.read 拿不到的 SPA/客户端渲染内容），本地 Chromium",
+        ready: true,
+        kind: "read",
+      },
     ];
   });
 
@@ -61,6 +68,15 @@ export async function toolRoutes(app: FastifyInstance) {
     const query = (req.body?.query ?? "").trim();
     if (!query) return reply.code(400).send({ error: "query 必填" });
     const result = await searchWeb(query);
+    if (result.error) return reply.code(502).send(result);
+    return reply.send(result);
+  });
+
+  // 真工具调用入口：POST /api/tools/browser.render { url, maxLength? }
+  app.post<{ Body: { url?: string; maxLength?: number } }>("/browser.render", async (req, reply) => {
+    const url = (req.body?.url ?? "").trim();
+    if (!url) return reply.code(400).send({ error: "url 必填" });
+    const result = await renderPage(url, { maxLength: req.body?.maxLength });
     if (result.error) return reply.code(502).send(result);
     return reply.send(result);
   });
