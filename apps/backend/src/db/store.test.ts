@@ -20,6 +20,8 @@ const resetTables = () => {
     DELETE FROM task_templates;
     DELETE FROM file_versions;
     DELETE FROM experts;
+    DELETE FROM memories;
+    DELETE FROM memories_fts;
   `);
 };
 
@@ -385,5 +387,42 @@ describe("用户自建专家（C6 store）", () => {
     expect(store.deleteExpert(id)).toBe(true);
     expect(store.deleteExpert(id)).toBe(false);
     expect(store.listCustomExperts(undefined).some((e) => e.id === id)).toBe(false);
+  });
+});
+
+describe("记忆系统（M41 store）", () => {
+  it("createMemory 落库回读 + listMemories 多用户隔离", () => {
+    const id = store.createMemory({ kind: "note", content: "用户偏好暖色调界面", tags: "偏好" }, "u1");
+    store.createMemory({ kind: "fact", content: "手里的私有记忆", tags: "" }, "u2");
+    // u1 只见自己，不见 u2
+    const forU1 = store.listMemories("u1");
+    expect(forU1.some((m) => m.id === id)).toBe(true);
+    expect(forU1.some((m) => m.content === "手里的私有记忆")).toBe(false);
+    // 未登录只见全局（user_id IS NULL）
+    expect(store.listMemories(undefined)).toHaveLength(0);
+  });
+
+  it("updateMemory 局部更新 + 不存在返回 false", () => {
+    const id = store.createMemory({ kind: "note", content: "旧" });
+    expect(store.updateMemory(id, { content: "新内容" })).toBe(true);
+    const g = store.getMemory(id)!;
+    expect(g.content).toBe("新内容");
+    expect(g.kind).toBe("note");
+    expect(store.updateMemory("nope", { content: "x" })).toBe(false);
+  });
+
+  it("deleteMemory 删除返回 true 且 FTS 同步清理", () => {
+    const id = store.createMemory({ kind: "note", content: "待删" });
+    expect(store.deleteMemory(id)).toBe(true);
+    expect(store.deleteMemory(id)).toBe(false);
+    expect(store.searchMemories("待删", undefined)).toHaveLength(0);
+  });
+
+  it("searchMemories 走 FTS trigram 命中子串", () => {
+    store.createMemory({ kind: "preference", content: "界面主色喜欢暖茶褐色", tags: "" });
+    store.createMemory({ kind: "note", content: "完全不相关内容", tags: "" });
+    const hits = store.searchMemories("暖茶褐", undefined);
+    expect(hits.some((m) => m.content.includes("暖茶褐色"))).toBe(true);
+    expect(hits.some((m) => m.content === "完全不相关内容")).toBe(false);
   });
 });

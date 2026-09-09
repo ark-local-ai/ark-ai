@@ -354,6 +354,19 @@ db.exec(`
     user_id TEXT,
     created TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS memories (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'note',
+    content TEXT NOT NULL,
+    tags TEXT,
+    user_id TEXT,
+    created TEXT NOT NULL
+  );
+
+  CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+    content, id UNINDEXED, user_id UNINDEXED, tokenize = 'trigram'
+  );
 `);
 
 export interface ChatSessionRow {
@@ -887,4 +900,100 @@ export function deleteExpert(id: string): boolean {
   const existed = !!db.prepare(`SELECT 1 FROM experts WHERE id = ?`).get(id);
   if (existed) db.prepare(`DELETE FROM experts WHERE id = ?`).run(id);
   return existed;
+}
+
+// ---- M41 记忆系统：memories 表 + 全文检索索引 ----
+export interface MemoryRow {
+  id: string;
+  kind: string;
+  content: string;
+  tags?: string;
+  created: string;
+}
+
+function syncMemoryFts(id: string, content: string, userId: string | null | undefined): void {
+  db.prepare(`DELETE FROM memories_fts WHERE id = ?`).run(id);
+  if (content) {
+    db.prepare(
+      `INSERT INTO memories_fts (id, user_id, content) VALUES (?, ?, ?)`,
+    ).run(id, userId ?? null, content);
+  }
+}
+
+/** 创建一条记忆；kind 可为 note/preference/fact 等，tags 逗号分隔。返回 id */
+export function createMemory(
+  m: { kind?: string; content: string; tags?: string },
+  userId?: string,
+): string {
+  const id = Math.random().toString(36).slice(2, 10);
+  const kind = m.kind || "note";
+  db.prepare(
+    `INSERT INTO memories (id, kind, content, tags, user_id, created)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, kind, m.content, m.tags ? m.tags : null, userId ?? null,
+    new Date().toLocaleString("zh-CN", { hour12: false }),
+  );
+  syncMemoryFts(id, m.content, userId);
+  return id;
+}
+
+/** 列出记忆（可按 kind 过滤；多用户隔离：自己的 + 全局） */
+export function listMemories(userId?: string, kind?: string): MemoryRow[] {
+  const where = ["(user_id = ? OR user_id IS NULL)"];
+  const params: (string | null)[] = [userId ?? null];
+  if (kind) {
+    where.push("kind = ?");
+    params.push(kind);
+  }
+  return db.prepare(
+    `SELECT id, kind, content, tags, created FROM memories WHERE ${where.join(" AND ")}
+     ORDER BY created DESC`,
+  ).all(...params) as unknown as MemoryRow[];
+}
+
+export function getMemory(id: string): MemoryRow | null {
+  const r = db.prepare(
+    `SELECT id, kind, content, tags, created FROM memories WHERE id = ?`,
+  ).get(id) as unknown as MemoryRow | undefined;
+  return r ?? null;
+}
+
+export function updateMemory(
+  id: string,
+  patch: { kind?: string; content?: string; tags?: string },
+  userId?: string,
+): boolean {
+  const cur = getMemory(id);
+  if (!cur) return false;
+  const kind = patch.kind ?? cur.kind;
+  const content = patch.content ?? cur.content;
+  const tags = patch.tags !== undefined ? patch.tags : (cur.tags ?? "");
+  db.prepare(
+    `UPDATE memories SET kind = ?, content = ?, tags = ? WHERE id = ?`,
+  ).run(kind, content, tags || null, id);
+  syncMemoryFts(id, content, userId ?? null);
+  return true;
+}
+
+export function deleteMemory(id: string): boolean {
+  const existed = !!db.prepare(`SELECT 1 FROM memories WHERE id = ?`).get(id);
+  if (existed) {
+    db.prepare(`DELETE FROM memories WHERE id = ?`).run(id);
+    db.prepare(`DELETE FROM memories_fts WHERE id = ?`).run(id);
+  }
+  return existed;
+}
+
+/** 记忆全文检索（FTS5 trigram，≥3 字子串；多用户隔离） */
+export function searchMemories(q: string, userId?: string): MemoryRow[] {
+  const term = (q ?? "").trim();
+  if (!term) return [];
+  return db.prepare(
+    `SELECT m.id, m.kind, m.content, m.tags, m.created
+     FROM memories_fts
+     JOIN memories m ON m.id = memories_fts.id
+     WHERE memories_fts MATCH ? AND (memories_fts.user_id = ? OR memories_fts.user_id IS NULL)
+     ORDER BY memories_fts.rowid DESC LIMIT 20`,
+  ).all(`"${term}"`, userId ?? null) as unknown as MemoryRow[];
 }

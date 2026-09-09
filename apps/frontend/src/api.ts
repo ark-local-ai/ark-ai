@@ -762,3 +762,49 @@ export async function rollbackFileVersion(name: string, seq: number): Promise<{ 
   if (!res.ok) throw new Error(`回滚失败: ${res.status}`);
   return res.json();
 }
+
+// ===== 记忆系统（M41）=====
+export interface MemoryDto {
+  id: string;
+  kind: string;
+  content: string;
+  tags?: string;
+  created: string;
+}
+
+export async function listMemories(kind?: string): Promise<MemoryDto[]> {
+  const q = kind ? `?kind=${encodeURIComponent(kind)}` : "";
+  const res = await fetch(`${BASE}/api/memories${q}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`获取记忆失败: ${res.status}`);
+  return res.json();
+}
+
+export async function searchMemories(q: string): Promise<MemoryDto[]> {
+  const res = await fetch(`${BASE}/api/memories/search?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`搜索记忆失败: ${res.status}`);
+  return res.json();
+}
+
+export async function createMemory(body: { kind?: string; content: string; tags?: string }): Promise<{ id: string }> {
+  const res = await fetch(`${BASE}/api/memories`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`创建记忆失败: ${res.status}`);
+  return res.json();
+}
+
+export async function updateMemory(id: string, body: { kind?: string; content?: string; tags?: string }): Promise<void> {
+  const res = await fetch(`${BASE}/api/memories/${id}`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`编辑记忆失败: ${res.status}`);
+}
+
+export async function deleteMemory(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/memories/${id}`, { method: "DELETE", headers: authHeaders() });
+  if (!res.ok) throw new Error(`删除记忆失败: ${res.status}`);
+}

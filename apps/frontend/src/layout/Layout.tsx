@@ -17,6 +17,7 @@ const TITLES: Record<string, string> = {
   "/app/settings": "设置",
   "/app/stats": "统计",
   "/app/task": "任务",
+  "/app/memories": "记忆",
 };
 
 // 这些页面自带顶部 tab 导行（pn-tabs），不再重复渲染页头标题

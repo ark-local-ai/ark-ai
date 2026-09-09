@@ -13,6 +13,7 @@ import Settings from "./pages/Settings";
 import Workspace from "./pages/Workspace";
 import TaskPage from "./pages/TaskPage";
 import Stats from "./pages/Stats";
+import Memories from "./pages/Memories";
 
 import "./index.css";
 import "./layout/shell.css";
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="workspace" element={<Workspace />} />
           <Route path="stats" element={<Stats />} />
+          <Route path="memories" element={<Memories />} />
           <Route path="task" element={<TaskPage />} />
         </Route>
       </Routes>

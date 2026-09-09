@@ -46,6 +46,9 @@ function labelFor(method: string, url: string): string {
   if (u.startsWith("/api/experts") && m === "POST") return "创建专家";
   if (u.startsWith("/api/experts") && m === "PUT") return "编辑专家";
   if (u.startsWith("/api/experts") && m === "DELETE") return "删除专家";
+  if (u.startsWith("/api/memories") && m === "POST") return "创建记忆";
+  if (u.startsWith("/api/memories") && m === "PUT") return "编辑记忆";
+  if (u.startsWith("/api/memories") && m === "DELETE") return "删除记忆";
   if (u.startsWith("/api/jobs") && m === "POST" && u.includes("/run")) return "手动执行任务";
   if (u.startsWith("/api/jobs") && m === "POST") return "新建定时任务";
   if (u.startsWith("/api/jobs") && m === "PUT") return "编辑定时任务";
