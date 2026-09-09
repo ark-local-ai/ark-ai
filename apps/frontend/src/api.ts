@@ -432,6 +432,19 @@ export async function getStats(): Promise<StatsDto> {
   return res.json();
 }
 
+// ===== 任务队列状态（M30）=====
+export interface QueueDto {
+  active: number; // 正在执行的任务数
+  queued: number; // 排队待执行的任务数
+  concurrency: number; // 配置的并发上限
+}
+
+export async function getQueue(): Promise<QueueDto> {
+  const res = await fetch(`${BASE}/api/queue`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`获取队列失败: ${res.status}`);
+  return res.json();
+}
+
 
 export async function createChannel(p: { name: string; proto: "openai" | "anthropic"; model: string; baseUrl: string; apiKey?: string }): Promise<ChannelDto> {
   const res = await fetch(`${BASE}/api/channels`, {

@@ -17,6 +17,7 @@ import { statsRoutes } from "./routes/stats.js";
 import { chatSessionRoutes } from "./routes/chat-sessions.js";
 import { globalEventsRoutes } from "./routes/events.js";
 import { auditRoutes, installAuditHook } from "./routes/audit.js";
+import { queueRoutes } from "./routes/queue.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { searchWorkspaceFiles } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
@@ -52,6 +53,7 @@ export async function buildApp() {
   app.register(authRoutes, { prefix: "/api/auth" });
   app.register(statsRoutes, { prefix: "/api/stats" });
   app.register(auditRoutes, { prefix: "/api/audit" });
+  app.register(queueRoutes, { prefix: "/api/queue" });
 
   // 工作空间列表：?space=<id> 指定空间目录，缺省扫根（默认工作空间）
   app.get("/api/workspace", async (req) => {
