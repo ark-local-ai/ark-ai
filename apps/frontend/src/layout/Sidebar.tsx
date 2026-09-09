@@ -7,7 +7,7 @@ import {
   ArkLogo, IconCollapse, IconArchive,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
-import { listTasks, deleteTask, retryTask, setTaskArchived, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, subscribeGlobal, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult } from "../api";
+import { listTasks, deleteTask, retryTask, setTaskArchived, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, searchChatMessages, subscribeGlobal, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult, type ChatSearchHit } from "../api";
 import AuthModal from "../components/AuthModal";
 
 type Mode = "task" | "space";
@@ -35,6 +35,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const [menuOpen, setMenuOpen] = useState(false);
   const [q, setQ] = useState("");
   const [fileHits, setFileHits] = useState<WorkspaceSearchResult[]>([]);
+  const [chatHits, setChatHits] = useState<ChatSearchHit[]>([]);
   const [fold, setFold] = useState<Record<string, boolean>>({});
   const [delTarget, setDelTarget] = useState<null | { kind: "task" | "space"; id: string }>(null);
   const [ctxMenu, setCtxMenu] = useState<null | { kind: "task" | "space"; id: string; x: number; y: number; title: string; archived?: boolean }>(null);
@@ -98,7 +99,16 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
     return () => { stale = true; };
   }, [findOpen, kw, q]);
 
+  // M23：Cmd+K 同时搜历史对话（FTS5 trigram）——按消息内容命中会话
+  useEffect(() => {
+    if (!findOpen || !kw) { setChatHits([]); return; }
+    let stale = false;
+    searchChatMessages(q.trim()).then((h) => { if (!stale) setChatHits(h); }).catch(() => { if (!stale) setChatHits([]); });
+    return () => { stale = true; };
+  }, [findOpen, kw, q]);
+
   const openTask = () => { setFindOpen(false); setMenuOpen(false); nav("/app/task"); };
+  const openChatSession = (sessionId: string) => { setFindOpen(false); setMenuOpen(false); nav(`/app/chat?sess=${sessionId}`); };
 
   const taskList = tasks.filter((t) => !t.space || t.space === "默认工作空间");
   const spaceGroups = spaceList.map((s) => ({
@@ -369,6 +379,14 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                       onClick={() => { setFindOpen(false); setMenuOpen(false); nav("/app/workspace"); }} />
                   ))}
                   {fileHits.length === 0 && <div className="sb-pop-empty">没有找到匹配文件</div>}
+                </div>
+                <div className="sb-pop-sub">历史对话</div>
+                <div className="sb-pop-list">
+                  {chatHits.map((c) => (
+                    <Row key={c.sessionId} title={`${c.title} · ${c.role === "assistant" ? "助理" : "我"}`} time={c.snippet}
+                      onClick={() => openChatSession(c.sessionId)} />
+                  ))}
+                  {chatHits.length === 0 && <div className="sb-pop-empty">没有找到匹配对话</div>}
                 </div>
               </>
             )}

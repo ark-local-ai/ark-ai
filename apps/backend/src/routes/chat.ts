@@ -5,7 +5,7 @@
 import type { FastifyInstance } from "fastify";
 import { pickChannel, recordSuccess, recordFailure } from "../models/router";
 import { chatStream, type ChatMessage } from "../models/client";
-import { createChatSession, appendChatMessage } from "../db/store";
+import { createChatSession, appendChatMessage, searchChatMessages } from "../db/store";
 import { currentUser } from "./auth";
 
 interface ChatBody {
@@ -80,5 +80,10 @@ export async function chatRoutes(app: FastifyInstance) {
     }
     appendChatMessage(sessionId, "assistant", sent);
     send("done", { text: sent, sessionId });
+  });
+
+  // 对话全文搜索（M23）：GET /api/chat/search?q= — 按消息内容搜历史对话，按会话去重
+  app.get<{ Querystring: { q?: string } }>("/search", async (req) => {
+    return searchChatMessages(req.query.q ?? "", currentUser(req)?.id);
   });
 }

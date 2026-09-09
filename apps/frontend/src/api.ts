@@ -261,6 +261,22 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
   if (!res.ok) throw new Error(`删除会话失败: ${res.status}`);
 }
 
+/** 对话搜索命中（M23）：一个会话去重为一条，含标题/角色/片段，可跳回会话 */
+export interface ChatSearchHit {
+  sessionId: string;
+  title: string;
+  role: string;
+  snippet: string;
+  updated: string;
+}
+
+/** 按消息内容全文搜索历史对话（后端 FTS5 trigram） */
+export async function searchChatMessages(q: string): Promise<ChatSearchHit[]> {
+  const res = await fetch(`${BASE}/api/chat/search?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`搜索对话失败: ${res.status}`);
+  return res.json();
+}
+
 
 export interface SkillDto {
   id: string;

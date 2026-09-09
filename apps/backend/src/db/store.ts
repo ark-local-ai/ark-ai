@@ -269,6 +269,10 @@ db.exec(`
     content TEXT NOT NULL,
     seq INTEGER NOT NULL
   );
+
+  CREATE VIRTUAL TABLE IF NOT EXISTS chat_messages_fts USING fts5(
+    session_id UNINDEXED, role UNINDEXED, content, tokenize = 'trigram'
+  );
 `);
 
 export interface ChatSessionRow {
@@ -292,6 +296,9 @@ export function appendChatMessage(sessionId: string, role: string, content: stri
     .get(sessionId) as { n: number };
   db.prepare(`INSERT INTO chat_messages (session_id, role, content, seq) VALUES (?, ?, ?, ?)`)
     .run(sessionId, role, content, n);
+  // 同步进 FTS 索引，保证新消息即时可搜（M23）
+  db.prepare(`INSERT INTO chat_messages_fts (session_id, role, content) VALUES (?, ?, ?)`)
+    .run(sessionId, role, content);
   db.prepare(`UPDATE chat_sessions SET updated = ? WHERE id = ?`)
     .run(new Date().toLocaleString("zh-CN", { hour12: false }), sessionId);
 }
@@ -317,6 +324,66 @@ export function deleteChatSession(id: string): boolean {
   return existed;
 }
 
+// ===== 对话全文搜索（M23，FTS5 trigram）=====
+// 与工作空间文件搜索（searchIndex.ts）同套路：对中文做真正的子串匹配。
+// 消息在 appendChatMessage 时增量入索引；此处也提供启动时全量重建兜底。
+export interface ChatSearchHit {
+  sessionId: string;
+  title: string;
+  role: string;
+  snippet: string;
+  updated: string;
+}
+
+/** 重建整个聊天 FTS 索引（启动时调用）：清空 → 回灌全部消息 */
+export function reindexChats(): number {
+  db.exec(`DELETE FROM chat_messages_fts;`);
+  const rows = db.prepare(`SELECT session_id, role, content FROM chat_messages`).all() as
+    { session_id: string; role: string; content: string }[];
+  const ins = db.prepare(`INSERT INTO chat_messages_fts (session_id, role, content) VALUES (?, ?, ?)`);
+  for (const r of rows) ins.run(r.session_id, r.role, r.content);
+  return rows.length;
+}
+
+function escapeFtsPhrase(q: string): string {
+  return q.replace(/["']/g, " ");
+}
+
+function makeSnippet(content: string, q: string): string {
+  const idx = content.indexOf(q);
+  const start = Math.max(0, idx - 10);
+  const piece = content.slice(start, start + 50);
+  return (start > 0 ? "…" : "") + piece + (start + 50 < content.length ? "…" : "");
+}
+
+/**
+ * 按消息内容搜索历史对话（≥3 字走 FTS trigram 子串；更短退回 LIKE）。
+ * 按会话去重（一个会话只返回一条命中），多用户隔离与会话列表同规。
+ */
+export function searchChatMessages(rawQ: string, userId?: string): ChatSearchHit[] {
+  const q = rawQ.trim();
+  if (!q) return [];
+  const base = `FROM chat_messages_fts ft JOIN chat_sessions s ON s.id = ft.session_id`;
+  const sel = `SELECT s.id AS sessionId, s.title AS title, ft.role AS role, ft.content AS content, s.updated AS updated\n           ${base}`;
+  const rows: { sessionId: string; title: string; role: string; content: string; updated: string }[] =
+    q.length >= 3
+      ? userId
+        ? (db.prepare(`${sel} WHERE chat_messages_fts MATCH ? AND (s.user_id = ? OR s.user_id IS NULL) ORDER BY s.updated DESC LIMIT 50`).all(`"${escapeFtsPhrase(q)}"`, userId) as typeof rows)
+        : (db.prepare(`${sel} WHERE chat_messages_fts MATCH ? ORDER BY s.updated DESC LIMIT 50`).all(`"${escapeFtsPhrase(q)}"`) as typeof rows)
+      : userId
+        ? (db.prepare(`${sel} WHERE ft.content LIKE ? AND (s.user_id = ? OR s.user_id IS NULL) ORDER BY s.updated DESC LIMIT 50`).all(`%${q}%`, userId) as typeof rows)
+        : (db.prepare(`${sel} WHERE ft.content LIKE ? ORDER BY s.updated DESC LIMIT 50`).all(`%${q}%`) as typeof rows);
+  // 按会话去重（保留最新一条命中）
+  const seen = new Set<string>();
+  const hits: ChatSearchHit[] = [];
+  for (const r of rows) {
+    if (seen.has(r.sessionId)) continue;
+    seen.add(r.sessionId);
+    hits.push({ sessionId: r.sessionId, title: r.title, role: r.role, snippet: makeSnippet(r.content, q), updated: r.updated });
+  }
+  return hits;
+}
+
 // 首次启动若没有空间，播种一个「默认工作空间」（dir 为空字符串表示根目录，兼容既有平铺文件）
 function seedSpaces(): void {
   const n = db.prepare(`SELECT COUNT(*) AS n FROM spaces`).get() as { n: number };
@@ -326,6 +393,7 @@ function seedSpaces(): void {
   }
 }
 seedSpaces();
+reindexChats();
 
 export function listSpaces(userId?: string): Space[] {
   // 多用户隔离：登录用户见自己的 + 全局；未登录见全部（兼容）
