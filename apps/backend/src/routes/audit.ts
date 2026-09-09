@@ -46,6 +46,10 @@ function labelFor(method: string, url: string): string {
   if (u.startsWith("/api/jobs") && m === "POST") return "新建定时任务";
   if (u.startsWith("/api/jobs") && m === "PUT") return "编辑定时任务";
   if (u.startsWith("/api/jobs") && m === "DELETE") return "删除定时任务";
+  if (u.startsWith("/api/templates") && m === "POST" && u.includes("/run")) return "应用任务模板";
+  if (u.startsWith("/api/templates") && m === "POST") return "创建任务模板";
+  if (u.startsWith("/api/templates") && m === "PUT") return "编辑任务模板";
+  if (u.startsWith("/api/templates") && m === "DELETE") return "删除任务模板";
   return `${m} ${u}`;
 }
 

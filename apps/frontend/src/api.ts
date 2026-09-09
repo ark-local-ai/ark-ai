@@ -613,3 +613,60 @@ export async function me(): Promise<AuthUser | null> {
   const data = (await res.json()) as { user: AuthUser };
   return data.user;
 }
+
+// ===== M33 任务模板 =====
+export interface TaskTemplateDto {
+  id: string;
+  name: string;
+  desc?: string;
+  prompt: string;
+  expert?: string;
+  skills?: string[];
+  model?: string;
+  created: string;
+}
+
+export async function listTemplates(): Promise<TaskTemplateDto[]> {
+  const res = await fetch(`${BASE}/api/templates`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`获取模板失败: ${res.status}`);
+  return res.json();
+}
+
+export async function createTemplate(input: {
+  name: string; desc?: string; prompt: string; expert?: string; skills?: string[]; model?: string;
+}): Promise<string> {
+  const res = await fetch(`${BASE}/api/templates`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`创建模板失败: ${res.status}`);
+  const data = (await res.json()) as { id: string };
+  return data.id;
+}
+
+export async function updateTemplate(id: string, input: Partial<TaskTemplateDto>): Promise<void> {
+  const res = await fetch(`${BASE}/api/templates/${id}`, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`更新模板失败: ${res.status}`);
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/templates/${id}`, {
+    method: "DELETE", headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`删除模板失败: ${res.status}`);
+}
+
+/** 应用模板：以其提示词创建并启动一个真实任务 */
+export async function runTemplate(id: string): Promise<string> {
+  const res = await fetch(`${BASE}/api/templates/${id}/run`, {
+    method: "POST", headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`应用模板失败: ${res.status}`);
+  const data = (await res.json()) as { taskId: string };
+  return data.taskId;
+}

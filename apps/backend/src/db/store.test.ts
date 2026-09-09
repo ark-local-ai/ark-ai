@@ -17,6 +17,7 @@ const resetTables = () => {
     DELETE FROM chat_messages_fts;
     DELETE FROM users;
     DELETE FROM sessions;
+    DELETE FROM task_templates;
   `);
 };
 
@@ -272,5 +273,51 @@ describe("cleanup 自动清理（M32）", () => {
     const row = db.prepare(`SELECT created_ts FROM tasks WHERE id = 'ts1'`).get() as { created_ts: number };
     expect(row.created_ts).toBeGreaterThanOrEqual(before);
     expect(row.created_ts).toBeLessThanOrEqual(Date.now());
+  });
+});
+
+describe("任务模板（M33）", () => {
+  it("createTaskTemplate + getTaskTemplate 读回 JSON 字段", () => {
+    const id = store.createTaskTemplate(
+      { name: "周报", desc: "生成销售周报", prompt: "基于数据生成周报", expert: "数据分析师", skills: ["Excel"], model: "c1·deepseek" },
+      "u-1",
+    );
+    const t = store.getTaskTemplate(id)!;
+    expect(t.name).toBe("周报");
+    expect(t.expert).toBe("数据分析师");
+    expect(t.skills).toEqual(["Excel"]);
+    expect(t.model).toBe("c1·deepseek");
+    expect(store.getTaskTemplate("nope")).toBeNull();
+  });
+
+  it("listTaskTemplates 多用户隔离（自己 + 全局）", () => {
+    store.createTaskTemplate({ name: "全局模板", prompt: "p" }); // 无 userId → 全局
+    store.createTaskTemplate({ name: "甲模板", prompt: "p" }, "alice");
+    store.createTaskTemplate({ name: "乙模板", prompt: "p" }, "bob");
+    const names = (s?: string) => store.listTaskTemplates(s).map((t) => t.name);
+    expect(names("alice")).toEqual(expect.arrayContaining(["全局模板", "甲模板"]));
+    expect(names("alice")).not.toContain("乙模板");
+    expect(names(undefined)).toContain("全局模板");
+  });
+
+  it("updateTaskTemplate 局部更新 + 找不到返回 false", () => {
+    const id = store.createTaskTemplate({ name: "旧名", prompt: "p" });
+    expect(store.updateTaskTemplate(id, { name: "新名" })).toBe(true);
+    expect(store.getTaskTemplate(id)!.name).toBe("新名");
+    expect(store.updateTaskTemplate("ghost", { name: "x" })).toBe(false);
+  });
+
+  it("deleteTaskTemplate 删除并返回存在性", () => {
+    const id = store.createTaskTemplate({ name: "待删", prompt: "p" });
+    expect(store.deleteTaskTemplate(id)).toBe(true);
+    expect(store.getTaskTemplate(id)).toBeNull();
+    expect(store.deleteTaskTemplate(id)).toBe(false);
+  });
+
+  it("skills 缺省存 null，读回 undefined", () => {
+    const id = store.createTaskTemplate({ name: "简", prompt: "p" });
+    const t = store.getTaskTemplate(id)!;
+    expect(t.skills).toBeUndefined();
+    expect(t.expert).toBeUndefined();
   });
 });

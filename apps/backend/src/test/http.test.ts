@@ -41,6 +41,12 @@ async function get(url: string, token?: string): Promise<LightMyRequestResponse>
     headers: token ? { authorization: `Bearer ${token}` } : {},
   });
 }
+async function putTemplate(id: string, body: unknown): Promise<LightMyRequestResponse> {
+  return app.inject({ method: "PUT", url: `/api/templates/${id}`, payload: body as Record<string, unknown> });
+}
+async function delTemplate(id: string): Promise<LightMyRequestResponse> {
+  return app.inject({ method: "DELETE", url: `/api/templates/${id}` });
+}
 
 describe("认证 API", () => {
   it("register → me → login → 错密 401 → logout → me 401", async () => {
@@ -159,5 +165,53 @@ describe("维护 API（M32）", () => {
     expect(typeof body.auditPruned).toBe("number");
     expect(body.taskRetentionDays).toBeGreaterThan(0);
     expect(body.auditKeepMax).toBeGreaterThan(0);
+  });
+});
+
+describe("任务模板 API（M33）", () => {
+  it("POST /api/templates 创建 → GET 列表/详情 → PUT 更新 → DELETE（含审计归类）", async () => {
+    // 创建
+    const created = await post("/api/templates", { name: "周报", prompt: "生成一份周报", expert: "数据分析师" });
+    expect(created.statusCode).toBe(201);
+    const id: string = created.json().id;
+    expect(id).toBeTruthy();
+
+    // 校验 name/prompt 必填
+    const bad = await post("/api/templates", { name: "x" }); // 缺 prompt
+    expect(bad.statusCode).toBe(400);
+
+    // 列表包含
+    const list = await get("/api/templates");
+    expect(list.statusCode).toBe(200);
+    expect((list.json() as { id: string }[]).some((t) => t.id === id)).toBe(true);
+
+    // 详情回填 JSON 字段
+    const detail = await get(`/api/templates/${id}`);
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().expert).toBe("数据分析师");
+
+    // 更新
+    const updated = await putTemplate(id, { name: "周报v2" });
+    expect(updated.statusCode).toBe(200);
+    const after = await get(`/api/templates/${id}`);
+    expect(after.json().name).toBe("周报v2");
+
+    // 删除
+    const del = await delTemplate(id);
+    expect(del.statusCode).toBe(200);
+    const gone = await get(`/api/templates/${id}`);
+    expect(gone.statusCode).toBe(404);
+  });
+
+  it("POST /api/templates/:id/run 应用模板建任务并返回 taskId", async () => {
+    const created = await post("/api/templates", { name: "快跑", prompt: "跑一个任务" });
+    const id: string = created.json().id;
+    const run = await post(`/api/templates/${id}/run`, {});
+    expect(run.statusCode).toBe(201);
+    const taskId: string = run.json().taskId;
+    expect(taskId).toBeTruthy();
+    // 任务由 runner 异步入队创建，这里不 assert 列表（异步竞态）；201+taskId 即契约
+    // 清理
+    await delTemplate(id);
   });
 });

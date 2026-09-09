@@ -4,7 +4,7 @@ import {
   IconAssistant, IconChevD, IconChevD2, IconChevU2, IconClock, IconDoc,
   IconFolder, IconFolderOpen, IconGear, IconLibrary, IconLink, IconNote, IconSearch,
   IconShare, IconRename, IconDots, IconSpark, IconTrash, IconUsers, IconChart,
-  ArkLogo, IconCollapse, IconArchive,
+  ArkLogo, IconCollapse, IconArchive, IconFiles,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
 import { listTasks, deleteTask, retryTask, setTaskArchived, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, searchChatMessages, subscribeGlobal, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult, type ChatSearchHit } from "../api";
@@ -24,6 +24,7 @@ const NAV = [
     ],
   },
   { to: "/app/automation", label: "自动化", icon: <IconClock size={15} />, sub: null },
+  { to: "/app/templates", label: "任务模板", icon: <IconFiles size={15} />, sub: null },
   { to: "/app/workspace", label: "资料库", icon: <IconLibrary size={15} />, sub: null },
   { to: "/app/stats", label: "统计", icon: <IconChart size={15} />, sub: null },
 ];

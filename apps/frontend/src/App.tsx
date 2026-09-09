@@ -7,6 +7,7 @@ import Experts from "./pages/Experts";
 import Skills from "./pages/Skills";
 import Connectors from "./pages/Connectors";
 import Prompts from "./pages/Prompts";
+import Templates from "./pages/Templates";
 import Automation from "./pages/Automation";
 import Settings from "./pages/Settings";
 import Workspace from "./pages/Workspace";
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="skills" element={<Skills />} />
           <Route path="connectors" element={<Connectors />} />
           <Route path="prompts" element={<Prompts />} />
+          <Route path="templates" element={<Templates />} />
           <Route path="automation" element={<Automation />} />
           <Route path="settings" element={<Settings />} />
           <Route path="workspace" element={<Workspace />} />

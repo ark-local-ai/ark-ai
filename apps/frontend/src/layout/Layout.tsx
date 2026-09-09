@@ -11,6 +11,7 @@ const TITLES: Record<string, string> = {
   "/app/skills": "技能",
   "/app/connectors": "连接器",
   "/app/prompts": "场景库",
+  "/app/templates": "任务模板",
   "/app/automation": "自动化",
   "/app/workspace": "资料库",
   "/app/settings": "设置",

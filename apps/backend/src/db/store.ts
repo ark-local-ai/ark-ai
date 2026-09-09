@@ -321,6 +321,18 @@ db.exec(`
   CREATE VIRTUAL TABLE IF NOT EXISTS chat_messages_fts USING fts5(
     session_id UNINDEXED, role UNINDEXED, content, tokenize = 'trigram'
   );
+
+  CREATE TABLE IF NOT EXISTS task_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    desc TEXT,
+    prompt TEXT NOT NULL,
+    expert TEXT,
+    skills TEXT,
+    model TEXT,
+    user_id TEXT,
+    created TEXT NOT NULL
+  );
 `);
 
 export interface ChatSessionRow {
@@ -668,4 +680,90 @@ export function listAudit(limit = 200): AuditEntry[] {
 /** 清空审计日志（可选项；保留架构接口） */
 export function clearAudit(): void {
   db.exec(`DELETE FROM audit_log;`);
+}
+
+// ---- M33 任务模板：CRUD（本地存储，可含预设的专家/技能/模型） ----
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  desc?: string;
+  prompt: string;
+  expert?: string;
+  skills?: string[];
+  model?: string;
+  created: string;
+}
+
+export function createTaskTemplate(
+  tpl: { name: string; desc?: string; prompt: string; expert?: string; skills?: string[]; model?: string },
+  userId?: string,
+): string {
+  const id = Math.random().toString(36).slice(2, 10);
+  db.prepare(
+    `INSERT INTO task_templates (id, name, desc, prompt, expert, skills, model, user_id, created)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, tpl.name, tpl.desc ?? null, tpl.prompt, tpl.expert ?? null,
+    tpl.skills?.length ? JSON.stringify(tpl.skills) : null, tpl.model ?? null,
+    userId ?? null, new Date().toLocaleString("zh-CN", { hour12: false }),
+  );
+  return id;
+}
+
+export function listTaskTemplates(userId?: string): TaskTemplate[] {
+  const rows = db.prepare(
+    `SELECT id, name, desc, prompt, expert, skills, model, created
+     FROM task_templates
+     WHERE user_id = ? OR user_id IS NULL
+     ORDER BY created DESC`,
+  ).all(userId ?? null) as {
+    id: string; name: string; desc: string | null; prompt: string;
+    expert: string | null; skills: string | null; model: string | null; created: string;
+  }[];
+  return rows.map((r) => ({
+    id: r.id, name: r.name, desc: r.desc ?? undefined, prompt: r.prompt,
+    expert: r.expert ?? undefined,
+    skills: r.skills ? JSON.parse(r.skills) as string[] : undefined,
+    model: r.model ?? undefined,
+    created: r.created,
+  }));
+}
+
+export function getTaskTemplate(id: string): TaskTemplate | null {
+  const r = db.prepare(
+    `SELECT id, name, desc, prompt, expert, skills, model, created FROM task_templates WHERE id = ?`,
+  ).get(id) as {
+    id: string; name: string; desc: string | null; prompt: string;
+    expert: string | null; skills: string | null; model: string | null; created: string;
+  } | undefined;
+  if (!r) return null;
+  return {
+    id: r.id, name: r.name, desc: r.desc ?? undefined, prompt: r.prompt,
+    expert: r.expert ?? undefined,
+    skills: r.skills ? JSON.parse(r.skills) as string[] : undefined,
+    model: r.model ?? undefined,
+    created: r.created,
+  };
+}
+
+export function updateTaskTemplate(id: string, patch: Partial<{ name: string; desc: string; prompt: string; expert: string; skills: string[]; model: string }>): boolean {
+  const existed = !!db.prepare(`SELECT 1 FROM task_templates WHERE id = ?`).get(id);
+  if (!existed) return false;
+  const cur = getTaskTemplate(id)!;
+  const name = patch.name ?? cur.name;
+  const desc = patch.desc !== undefined ? patch.desc : (cur.desc ?? "");
+  const prompt = patch.prompt ?? cur.prompt;
+  const expert = patch.expert !== undefined ? patch.expert : (cur.expert ?? "");
+  const skills = patch.skills ?? (cur.skills ?? []);
+  const model = patch.model !== undefined ? patch.model : (cur.model ?? "");
+  db.prepare(
+    `UPDATE task_templates SET name = ?, desc = ?, prompt = ?, expert = ?, skills = ?, model = ? WHERE id = ?`,
+  ).run(name, desc || null, prompt, expert || null, skills.length ? JSON.stringify(skills) : null, model || null, id);
+  return true;
+}
+
+export function deleteTaskTemplate(id: string): boolean {
+  const existed = !!db.prepare(`SELECT 1 FROM task_templates WHERE id = ?`).get(id);
+  if (existed) db.prepare(`DELETE FROM task_templates WHERE id = ?`).run(id);
+  return existed;
 }
