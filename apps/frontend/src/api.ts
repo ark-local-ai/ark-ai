@@ -164,6 +164,46 @@ export async function webRead(url: string): Promise<{ url: string; title: string
   return res.json() as Promise<{ url: string; title: string; text: string; length: number; error?: string }>;
 }
 
+// ===== M50 保存到资料库 + 联网搜索源设置 =====
+export interface SaveToWorkspaceResult {
+  name: string;
+  path: string;
+  dir: string;
+  versionSeq: number | null;
+  error?: string;
+}
+/** 把上网读到的正文「存进资料库」——写进当前活动工作空间（Markdown + 版本快照） */
+export async function saveToWorkspace(input: {
+  title?: string; url?: string; text: string; source?: string;
+}): Promise<SaveToWorkspaceResult> {
+  const res = await authFetch("/api/tools/save", { method: "POST", body: JSON.stringify(input) });
+  if (!res.ok) {
+    const e = (await res.json().catch(() => ({}))) as { error?: string };
+    return { name: "", path: "", dir: "", versionSeq: null, error: e.error ?? `保存失败(${res.status})` };
+  }
+  return res.json() as Promise<SaveToWorkspaceResult>;
+}
+
+export interface SearchSourceStatus {
+  enabled: boolean;
+  provider: "duckduckgo" | "custom";
+  endpointConfigured: boolean;
+}
+/** 读联网搜索源状态（是否启用 / 来源 / 是否配了自定义 endpoint） */
+export async function getSearchSource(): Promise<SearchSourceStatus> {
+  const res = await authFetch("/api/tools/search/source");
+  if (!res.ok) return { enabled: true, provider: "duckduckgo", endpointConfigured: false };
+  return res.json();
+}
+/** 开关联网搜索（符合「数据不出机器」：可显式关停出网能力） */
+export async function setSearchSourceEnabled(enabled: boolean): Promise<{ enabled: boolean }> {
+  const res = await authFetch("/api/tools/search/source/enabled", {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  });
+  return res.json();
+}
+
 // ===== 多工作空间（spaces）=====
 export interface SpaceDto {
   id: string;

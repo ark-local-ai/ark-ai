@@ -1,3 +1,5 @@
+import { isWebSearchEnabled } from "./searchSettings";
+
 // ===== 内置联网搜索工具（M47 search.web） =====
 // 本地优先、默认免 key：直接 fetch 一个搜索端点取回标题/链接/摘要，供编排层「调研/搜索」
 // 类提示词自动联网（配合 web.read 读正文组成完整链路），也走 /api/tools 真工具调用入口。
@@ -82,6 +84,7 @@ export async function searchWeb(query: string): Promise<WebSearchResult> {
   const q = (query ?? "").trim();
   if (!q) return { query: q, hits: [], count: 0, error: "query 为空" };
   if (q.length < 2) return { query: q, hits: [], count: 0, error: "query 太短" };
+  if (!isWebSearchEnabled()) return { query: q, hits: [], count: 0, error: "联网搜索已关闭" };
   try {
     let hits: WebSearchHit[];
     if ((process.env.ARK_WEBSEARCH_ENDPOINT ?? "").trim()) {

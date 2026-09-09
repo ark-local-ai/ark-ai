@@ -3,7 +3,8 @@ import { ftColor, ftLabel } from "../data/mock";
 import {
   listSpaces, listSpaceFiles, createSpace, setActiveSpace, deleteSpace,
   workspaceUrl, searchWorkspace, listFileVersions, rollbackFileVersion,
-  webSearch, webRead, type WebSearchHit,
+  webSearch, webRead, saveToWorkspace, getSearchSource, setSearchSourceEnabled,
+  type WebSearchHit,
   type SpaceDto, type WorkspaceFileDto, type WorkspaceSearchResult, type FileVersionDto,
 } from "../api";
 
@@ -122,6 +123,38 @@ export default function Workspace() {
     setWover((o) => ({ ...o, [h.url]: r.error ? `⚠ ${r.error}` : r.text }));
   };
 
+  // M50：把结果「存进资料库」（有正文用正文，否则先读网页）；+ 搜索源开关
+  const [srcEnabled, setSrcEnabled] = useState(true);
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    getSearchSource().then((s) => setSrcEnabled(s.enabled)).catch(() => {});
+  }, []);
+  const doToggleSearch = async () => {
+    const next = !srcEnabled;
+    setSrcEnabled(next);
+    try {
+      await setSearchSourceEnabled(next);
+      setSaveMsg({ ok: true, text: next ? "已开启联网搜索" : "已关闭联网搜索（数据不再出网）" });
+    } catch {
+      setSrcEnabled(!next);
+      setSaveMsg({ ok: false, text: "开关失败" });
+    }
+  };
+  const doSaveHit = async (h: WebSearchHit) => {
+    let text = wover[h.url];
+    if (!text || text.startsWith("⚠ ")) {
+      setWreading(h.url);
+      const r = await webRead(h.url);
+      setWreading("");
+      if (r.error) { setSaveMsg({ ok: false, text: `读取失败：${r.error}` }); return; }
+      text = r.text;
+      setWover((o) => ({ ...o, [h.url]: r.text }));
+    }
+    const res = await saveToWorkspace({ title: h.title, url: h.url, text, source: "search" });
+    if (res.error) setSaveMsg({ ok: false, text: res.error });
+    else { setSaveMsg({ ok: true, text: `已存入资料库：${res.name}` }); loadFiles(activeId); }
+  };
+
   return (
     <div className="page">
       <div className="workspace-wrap">
@@ -179,8 +212,15 @@ export default function Workspace() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <b style={{ fontSize: 13.5 }}>联网搜索</b>
               <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-                搜真实网络（默认免 key · DuckDuckGo），可点开读正文
+                搜真实网络（默认免 key · DuckDuckGo），可点开读正文、存入资料库
               </span>
+              {/* M50：搜索源可控/可显式关停（数据不出机器） */}
+              <button className={`btn soft sm${srcEnabled ? "" : ""}`}
+                onClick={doToggleSearch}
+                title={srcEnabled ? "关闭后联网搜索将停用（数据不再出网）" : "重新开启联网搜索"}
+                style={{ marginLeft: "auto", color: srcEnabled ? "var(--brand)" : "var(--warn)" }}>
+                {srcEnabled ? "联网 · 开" : "联网 · 关"}
+              </button>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <input
@@ -191,11 +231,16 @@ export default function Workspace() {
                 onChange={(e) => setWq(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && doWebSearch()}
               />
-              <button className="btn sm" onClick={doWebSearch} disabled={wloading}>
-                {wloading ? "搜索中…" : "搜索"}
+              <button className="btn sm" onClick={doWebSearch} disabled={wloading || !srcEnabled}>
+                {!srcEnabled ? "搜索已关闭" : wloading ? "搜索中…" : "搜索"}
               </button>
             </div>
             {werr && <div style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 10 }}>{werr}</div>}
+            {saveMsg && (
+              <div style={{ fontSize: 12, marginTop: 8, color: saveMsg.ok ? "var(--brand)" : "var(--warn)" }}>
+                {saveMsg.text}
+              </div>
+            )}
             {whits && (
               <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
                 {whits.length === 0 && (
@@ -208,6 +253,9 @@ export default function Workspace() {
                         style={{ fontSize: 13, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>
                         {h.title}
                       </a>
+                      <button className="btn soft sm" onClick={() => doSaveHit(h)} title="把正文保存为资料库 markdown 文件">
+                        {wreading === h.url ? "读取中…" : "存资料库"}
+                      </button>
                       <button className="btn ghost sm" style={{ marginLeft: "auto" }}
                         onClick={() => doRead(h)}>
                         {wreading === h.url ? "读取中…" : wover[h.url] ? "收起" : "读正文"}

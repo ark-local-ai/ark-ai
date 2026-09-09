@@ -6,6 +6,8 @@ import { webRead } from "../tools/web";
 import { searchKnowledge } from "../tools/knowledge";
 import { searchWeb } from "../tools/websearch";
 import { renderPage } from "../tools/browser";
+import { saveToWorkspace } from "../tools/save";
+import { getSearchSourceStatus, setWebSearchEnabled, isWebSearchEnabled } from "../tools/searchSettings";
 import { currentUser } from "./auth";
 
 export interface ToolInfo {
@@ -67,6 +69,7 @@ export async function toolRoutes(app: FastifyInstance) {
   app.post<{ Body: { query?: string } }>("/web.search", async (req, reply) => {
     const query = (req.body?.query ?? "").trim();
     if (!query) return reply.code(400).send({ error: "query 必填" });
+    if (!isWebSearchEnabled()) return reply.code(403).send({ error: "联网搜索已关闭" });
     const result = await searchWeb(query);
     if (result.error) return reply.code(502).send(result);
     return reply.send(result);
@@ -79,6 +82,22 @@ export async function toolRoutes(app: FastifyInstance) {
     const result = await renderPage(url, { maxLength: req.body?.maxLength });
     if (result.error) return reply.code(502).send(result);
     return reply.send(result);
+  });
+
+  // M50：把上网读到的正文「存进资料库」——写进当前活动工作空间（Markdown + 版本快照）
+  app.post<{ Body: { title?: string; url?: string; text: string; source?: string } }>(
+    "/save", async (req, reply) => {
+      const r = await saveToWorkspace(req.body ?? { text: "" });
+      if (r.error) return reply.code(400).send(r);
+      return reply.send(r);
+    },
+  );
+
+  // M50 副线：联网搜索源设置（可控、可显式关停）
+  app.get("/search/source", async () => getSearchSourceStatus());
+  app.post<{ Body: { enabled: boolean } }>("/search/source/enabled", async (req, reply) => {
+    if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "enabled 必填" });
+    return { enabled: setWebSearchEnabled(req.body.enabled) };
   });
 }
 
