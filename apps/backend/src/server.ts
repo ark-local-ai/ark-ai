@@ -14,6 +14,7 @@ import { scenarioRoutes } from "./routes/scenarios.js";
 import { spaceRoutes, resolveSpaceDir } from "./routes/spaces.js";
 import { authRoutes } from "./routes/auth.js";
 import { statsRoutes } from "./routes/stats.js";
+import { chatSessionRoutes } from "./routes/chat-sessions.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { startScheduler } from "./scheduler/jobs.js";
 import { pruneSessions } from "./db/store.js";
@@ -30,6 +31,7 @@ export async function buildApp() {
   app.register(taskRoutes, { prefix: "/api/tasks" });
   app.register(channelRoutes, { prefix: "/api/channels" });
   app.register(chatRoutes, { prefix: "/api/chat" });
+  app.register(chatSessionRoutes, { prefix: "/api/chat/sessions" });
   app.register(skillRoutes, { prefix: "/api/skills" });
   app.register(expertRoutes, { prefix: "/api/experts" });
   app.register(jobRoutes, { prefix: "/api/jobs" });

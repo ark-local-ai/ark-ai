@@ -5,6 +5,8 @@
 import type { FastifyInstance } from "fastify";
 import { pickChannel, recordSuccess, recordFailure } from "../models/router";
 import { chatStream, type ChatMessage } from "../models/client";
+import { createChatSession, appendChatMessage } from "../db/store";
+import { currentUser } from "./auth";
 
 interface ChatBody {
   sessionId?: string;
@@ -26,6 +28,14 @@ export async function chatRoutes(app: FastifyInstance) {
     if (!message) {
       return reply.code(400).send({ error: "message 不能为空" });
     }
+    const userId = currentUser(req)?.id;
+    // M19：会话持久化——无 sessionId 则新建（标题取首条消息前 20 字），有则复用
+    let sessionId = req.body?.sessionId;
+    if (!sessionId) {
+      sessionId = createChatSession(message.slice(0, 20) || "新对话", userId);
+    }
+    appendChatMessage(sessionId, "user", message);
+
     const history: ChatMessage[] = (req.body?.history ?? []).slice(-10).map((m) => ({
       role: m.role === "assistant" ? "assistant" : "user",
       content: m.content,
@@ -49,7 +59,8 @@ export async function chatRoutes(app: FastifyInstance) {
       try {
         const full = await chatStream(ch, history, (delta) => send("token", { text: delta }));
         recordSuccess(ch.id);
-        send("done", { text: full });
+        appendChatMessage(sessionId, "assistant", full);
+        send("done", { text: full, sessionId });
         return;
       } catch (e) {
         recordFailure(ch.id);
@@ -67,6 +78,7 @@ export async function chatRoutes(app: FastifyInstance) {
       send("token", { text: chunk });
       await new Promise((r) => setTimeout(r, 24));
     }
-    send("done", { text: sent });
+    appendChatMessage(sessionId, "assistant", sent);
+    send("done", { text: sent, sessionId });
   });
 }

@@ -223,6 +223,72 @@ if (!spaceCols.some((c) => c.name === "user_id")) {
   db.exec(`ALTER TABLE spaces ADD COLUMN user_id TEXT`);
 }
 
+// ===== 对话（chat）持久化（M19）=====
+// 助理对话存入 SQLite：会话 + 消息两表。user_id 与任务同规（NULL=全局/未登录）。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    user_id TEXT,
+    created TEXT NOT NULL,
+    updated TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    seq INTEGER NOT NULL
+  );
+`);
+
+export interface ChatSessionRow {
+  id: string; title: string; created: string; updated: string;
+}
+export interface ChatMessageRow {
+  role: "user" | "assistant"; content: string;
+}
+
+export function createChatSession(title: string, userId?: string): string {
+  const id = Math.random().toString(36).slice(2, 10);
+  const ts = new Date().toLocaleString("zh-CN", { hour12: false });
+  db.prepare(`INSERT INTO chat_sessions (id, title, user_id, created, updated) VALUES (?, ?, ?, ?, ?)`)
+    .run(id, title, userId ?? null, ts, ts);
+  return id;
+}
+
+export function appendChatMessage(sessionId: string, role: string, content: string): void {
+  const { n } = db
+    .prepare(`SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM chat_messages WHERE session_id = ?`)
+    .get(sessionId) as { n: number };
+  db.prepare(`INSERT INTO chat_messages (session_id, role, content, seq) VALUES (?, ?, ?, ?)`)
+    .run(sessionId, role, content, n);
+  db.prepare(`UPDATE chat_sessions SET updated = ? WHERE id = ?`)
+    .run(new Date().toLocaleString("zh-CN", { hour12: false }), sessionId);
+}
+
+export function listChatSessions(userId?: string): ChatSessionRow[] {
+  return (userId
+    ? db.prepare(`SELECT id, title, created, updated FROM chat_sessions WHERE user_id = ? OR user_id IS NULL ORDER BY updated DESC`)
+      .all(userId)
+    : db.prepare(`SELECT id, title, created, updated FROM chat_sessions ORDER BY updated DESC`).all()
+  ) as unknown as ChatSessionRow[];
+}
+
+export function getChatMessages(sessionId: string): ChatMessageRow[] {
+  return db
+    .prepare(`SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY seq`)
+    .all(sessionId) as unknown as ChatMessageRow[];
+}
+
+export function deleteChatSession(id: string): boolean {
+  const existed = !!db.prepare(`SELECT 1 FROM chat_sessions WHERE id = ?`).get(id);
+  db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(id);
+  db.prepare(`DELETE FROM chat_sessions WHERE id = ?`).run(id);
+  return existed;
+}
+
 // 首次启动若没有空间，播种一个「默认工作空间」（dir 为空字符串表示根目录，兼容既有平铺文件）
 function seedSpaces(): void {
   const n = db.prepare(`SELECT COUNT(*) AS n FROM spaces`).get() as { n: number };

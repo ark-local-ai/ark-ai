@@ -133,27 +133,30 @@ export interface ChatMsg {
 
 /**
  * 发送对话，返回 SSE 流式回复（fetch stream 解析 token）。
- * onToken 每次收到文本增量调用；onDone 流结束（带完整回复文本）；onError 连接异常。
+ * onToken 每次收到文本增量调用；onDone 流结束（带完整回复文本与 sessionId）；onError 连接异常。
+ * sessionId: M19 会话持久化——无则后端创建新会话，有则续写该会话。
  * 返回取消函数。
  */
 export function sendChat(
   message: string,
   history: ChatMsg[],
   onToken: (t: string) => void,
-  onDone?: (full: string) => void,
+  onDone?: (result: { text: string; sessionId?: string }) => void,
   onError?: (err: unknown) => void,
+  sessionId?: string,
 ): () => void {
   const ctrl = new AbortController();
   let closed = false;
 
   (async () => {
     let full = "";
+    let returnSessionId: string | undefined = sessionId;
     try {
       const res = await fetch(`${BASE}/api/chat`, {
         method: "POST",
         signal: ctrl.signal,
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({ message, history, sessionId }),
       });
       if (!res.ok || !res.body) throw new Error(`chat ${res.status}`);
       const reader = res.body.getReader();
@@ -173,14 +176,16 @@ export function sendChat(
             else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
           }
           if (!dataStr) continue;
-          const data = JSON.parse(dataStr) as { text?: string };
+          const data = JSON.parse(dataStr) as { text?: string; sessionId?: string };
           if (eventType === "token" && data.text) {
             full += data.text;
             onToken(data.text);
+          } else if (eventType === "done") {
+            if (data.sessionId) returnSessionId = data.sessionId;
           }
         }
       }
-      if (!closed) onDone?.(full);
+      if (!closed) onDone?.({ text: full, sessionId: returnSessionId });
     } catch (err) {
       if (!closed && onError) onError(err);
     }
@@ -191,6 +196,30 @@ export function sendChat(
     ctrl.abort();
   };
 }
+
+// ===== 对话会话持久化（M19）=====
+export interface ChatSessionDto {
+  id: string; title: string; created: string; updated: string;
+}
+
+export async function listChatSessions(): Promise<ChatSessionDto[]> {
+  const res = await fetch(`${BASE}/api/chat/sessions`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`获取会话失败: ${res.status}`);
+  return res.json();
+}
+
+export async function getChatMessages(sessionId: string): Promise<ChatMsg[]> {
+  const res = await fetch(`${BASE}/api/chat/sessions/${sessionId}/messages`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`获取会话消息失败: ${res.status}`);
+  const d = (await res.json()) as { messages: ChatMsg[] };
+  return d.messages;
+}
+
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/chat/sessions/${sessionId}`, { method: "DELETE", headers: authHeaders() });
+  if (!res.ok) throw new Error(`删除会话失败: ${res.status}`);
+}
+
 
 export interface SkillDto {
   id: string;

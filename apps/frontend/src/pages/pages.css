@@ -155,6 +155,23 @@
 .msg.ai .msg-bub { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 5px; box-shadow: var(--shadow-sm); }
 .chat-page { display: flex; flex-direction: column; }
 .chat-page .chat-list { flex: 1; overflow: auto; }
+/* ===== 对话持久化会话栏（M19）===== */
+.chat-wrap { display: flex; flex: 1; min-height: 0; gap: 18px; }
+.chat-sess { width: 210px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px; }
+.chat-sess-head { display: flex; align-items: center; justify-content: space-between; }
+.chat-sess-head b { font-size: 13px; }
+.chat-sess-list { display: flex; flex-direction: column; gap: 6px; overflow: auto; }
+.chat-sess-item { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: var(--radius-sm);
+  cursor: pointer; border: 1px solid transparent; }
+.chat-sess-item:hover { background: var(--surface-2); }
+.chat-sess-item.on { background: var(--brand-soft); border-color: var(--brand-line); }
+.cst-title { flex: 1; font-size: 12.5px; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cst-time { font-size: 10.5px; color: var(--text-3); }
+.cst-del { opacity: 0; color: var(--text-3); display: inline-flex; align-items: center; }
+.chat-sess-item:hover .cst-del { opacity: 1; }
+.cst-del:hover { color: var(--danger); }
+.chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 /* 工作空间 · 新建（内联输入） */
 .space-item.add:hover { background: var(--brand-soft); }
