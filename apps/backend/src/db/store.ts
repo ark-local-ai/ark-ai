@@ -997,3 +997,31 @@ export function searchMemories(q: string, userId?: string): MemoryRow[] {
      ORDER BY memories_fts.rowid DESC LIMIT 20`,
   ).all(`"${term}"`, userId ?? null) as unknown as MemoryRow[];
 }
+
+/**
+ * M42 对话注入检索：FTS 短语式的整句匹配对中文召回太差（用户消息通常不是记忆的连续子串），
+ * 改从消息里抽 **CJK 二元组 + 英文词**，用 LIKE 高召回找相关记忆。短记忆量级下效率足够。
+ */
+export function searchMemoriesFor(message: string, userId?: string): MemoryRow[] {
+  const text = (message ?? "").trim();
+  if (!text) return [];
+  const grams: string[] = [];
+  // CJK 二元组
+  const cjk = text.match(/[\u4e00-\u9fa5]+/g) ?? [];
+  for (const seg of cjk) {
+    for (let i = 0; i + 1 < seg.length; i++) grams.push(seg.slice(i, i + 2));
+  }
+  // 英文/数字词（≥3 字符才有区分度）
+  const words = text.match(/[a-zA-Z0-9]{3,}/g) ?? [];
+  for (const w of words) grams.push(w.toLowerCase());
+  const unique = [...new Set(grams)];
+  if (!unique.length) return [];
+  const like = unique.map((g) => `content LIKE '%'||?||'%'`).join(" OR ");
+  const params: (string | null)[] = [userId ?? null, ...unique];
+  return db.prepare(
+    `SELECT id, kind, content, tags, created
+     FROM memories
+     WHERE (user_id = ? OR user_id IS NULL) AND (${like})
+     ORDER BY created DESC LIMIT 10`,
+  ).all(...params) as unknown as MemoryRow[];
+}

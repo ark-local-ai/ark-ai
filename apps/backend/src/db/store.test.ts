@@ -426,3 +426,32 @@ describe("记忆系统（M41 store）", () => {
     expect(hits.some((m) => m.content === "完全不相关内容")).toBe(false);
   });
 });
+
+describe("记忆对话注入（M42 store searchMemoriesFor）", () => {
+  beforeEach(() => {
+    resetTables();
+  });
+
+  it("抽取用户消息的 CJK 二元组，高召回命中相关记忆", () => {
+    store.createMemory({ kind: "preference", content: "开会喜欢简短结论" }, "u1");
+    store.createMemory({ kind: "note", content: "下周去上海出差" }, "u1");
+    // 消息里有「喜欢」二元组 → 命中第一条
+    const hits = store.searchMemoriesFor("我比较喜欢简洁汇报", "u1");
+    expect(hits.some((m) => m.content.includes("开会喜欢简短结论"))).toBe(true);
+    expect(hits.some((m) => m.content.includes("上海出差"))).toBe(false);
+  });
+
+  it("英文/数字词（≥3 字符）也能命中；多用户隔离", () => {
+    store.createMemory({ kind: "note", content: "项目代号 ark engine" }, "u1");
+    store.createMemory({ kind: "note", content: "另一用户 ark 私有" }, "u2");
+    const hits = store.searchMemoriesFor("帮我看下 ark engine 部署", "u1");
+    expect(hits.some((m) => m.content.includes("项目代号 ark engine"))).toBe(true);
+    expect(hits.some((m) => m.content.includes("另一用户"))).toBe(false);
+  });
+
+  it("无字词或纯标点消息返回空", () => {
+    store.createMemory({ kind: "note", content: "会议定在上午" }, "u1");
+    expect(store.searchMemoriesFor("！！！？？", "u1")).toHaveLength(0);
+    expect(store.searchMemoriesFor("", "u1")).toHaveLength(0);
+  });
+});

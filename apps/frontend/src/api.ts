@@ -185,7 +185,12 @@ export function sendChat(
   onDone?: (result: { text: string; sessionId?: string; taskId?: string }) => void,
   onError?: (err: unknown) => void,
   sessionId?: string,
-  opts?: { runTask?: boolean; onTaskCreated?: (taskId: string, sessionId?: string) => void },
+  opts?: {
+    runTask?: boolean;
+    onTaskCreated?: (taskId: string, sessionId?: string) => void;
+    onMemoryCtx?: (count: number) => void;
+    onMemorySaved?: (content: string, kind?: string) => void;
+  },
 ): () => void {
   const ctrl = new AbortController();
   let closed = false;
@@ -219,11 +224,15 @@ export function sendChat(
             else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
           }
           if (!dataStr) continue;
-          const data = JSON.parse(dataStr) as { text?: string; sessionId?: string; taskId?: string };
+          const data = JSON.parse(dataStr) as { text?: string; sessionId?: string; taskId?: string; count?: number; content?: string; kind?: string };
           if (eventType === "task_created" && data.taskId) {
             if (data.sessionId) returnSessionId = data.sessionId;
             taskIdRef = data.taskId;
             opts?.onTaskCreated?.(data.taskId, data.sessionId);
+          } else if (eventType === "memory_ctx" && typeof data.count === "number") {
+            opts?.onMemoryCtx?.(data.count);
+          } else if (eventType === "memory_saved" && data.content) {
+            opts?.onMemorySaved?.(data.content, data.kind);
           } else if (eventType === "token" && data.text) {
             full += data.text;
             onToken(data.text);

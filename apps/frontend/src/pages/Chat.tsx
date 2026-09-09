@@ -30,6 +30,7 @@ export default function Chat() {
   const [v, setV] = useState("");
   const [busy, setBusy] = useState(false);
   const [runMode, setRunMode] = useState(false);
+  const [memFlash, setMemFlash] = useState<string | null>(null);
   const historyRef = useRef<ChatMsg[]>([]);
 
   const loadSessions = () => {
@@ -114,6 +115,20 @@ export default function Chat() {
       sessionId ?? undefined,
       {
         runTask: runMode,
+        onMemoryCtx: (count) => {
+          setMemFlash(`已注入 ${count} 条相关记忆`);
+          setTimeout(() => setMemFlash(null), 4000);
+        },
+        onMemorySaved: (content) => {
+          // /记得 已存，替换助理气泡为确认文案
+          setMsgs((m) => {
+            if (aiIndex >= m.length) return m;
+            const next = [...m];
+            next[aiIndex] = { ...next[aiIndex], text: `✅ 已记住：${content.slice(0, 40)}` };
+            return next;
+          });
+          setMemFlash(null);
+        },
         onTaskCreated: (taskId, sid) => {
           if (sid) setSessionId(sid);
           setTask((t) => ({ ...t, taskId }));
@@ -203,6 +218,7 @@ export default function Chat() {
                 title="执行模式：把这句话作为真实 Agent 任务执行">
                 {runMode ? "执行 ON" : "执行 OFF"}
               </button>
+              {memFlash && <span className="pill mem-flash">{memFlash}</span>}
               <button className="send" onClick={send} disabled={busy}><IconSend /></button>
             </div>
           </div>

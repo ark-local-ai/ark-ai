@@ -8,7 +8,9 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { pickChannel, recordSuccess, recordFailure } from "../models/router";
 import { chatStream, type ChatMessage } from "../models/client";
-import { createChatSession, appendChatMessage, searchChatMessages } from "../db/store";
+import {
+  createChatSession, appendChatMessage, searchChatMessages, createMemory, searchMemoriesFor,
+} from "../db/store";
 import { enqueueTask } from "./../agent/runner.js";
 import { currentUser } from "./auth";
 
@@ -17,6 +19,23 @@ interface ChatBody {
   message?: string;
   history?: { role: "user" | "assistant"; content: string }[];
   runTask?: boolean;
+}
+
+/** M42：`/记得 …` 命令——把一句话沉淀为记忆。返回解析结果，非命令返回 null。 */
+export function parseRemember(message: string): { content: string; kind?: string } | null {
+  const m = message.trim();
+  if (!m.startsWith("/记得")) return null;
+  let rest = m.slice("/记得".length).trim();
+  // 支持标签式 kind 前缀：/记得 [偏好] 内容
+  let kind: string | undefined;
+  const tag = rest.match(/^\[(.+?)\]\s*(.*)$/);
+  if (tag) {
+    const k = tag[1].trim();
+    if (["偏好", "事实", "笔记"].includes(k)) kind = { 偏好: "preference", 事实: "fact", 笔记: "note" }[k];
+    rest = tag[2].trim();
+  }
+  if (!rest) return null;
+  return { content: rest, kind };
 }
 
 /**
@@ -61,6 +80,30 @@ export async function chatRoutes(app: FastifyInstance) {
     }));
     history.push({ role: "user", content: message });
 
+    // M42：`/记得 …` 命令——把一句话沉淀为记忆并回执，不进入模型/任务
+    const remembered = parseRemember(message);
+    if (remembered) {
+      reply.raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      const send = (type: string, data: unknown) => {
+        reply.raw.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+      const id = createMemory({ kind: remembered.kind, content: remembered.content }, userId);
+      const reason = `已记住：${remembered.content.slice(0, 40)}${remembered.kind ? `（${remembered.kind}）` : ""}`;
+      appendChatMessage(sessionId, "assistant", reason);
+      send("memory_saved", { id, content: remembered.content, kind: remembered.kind });
+      send("done", { text: reason, sessionId });
+      return;
+    }
+
+    // M42：把与当前消息相关的记忆检索进上下文（系统提示注入），并告知前端注入了几条
+    const memHits = userId ? searchMemoriesFor(message, userId) : [];
+    const memList = memHits.slice(0, 6).map((m) => (m.kind ? `[${m.kind}]` : "") + m.content);
+
     // SSE 头
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -71,6 +114,20 @@ export async function chatRoutes(app: FastifyInstance) {
     const send = (type: string, data: unknown) => {
       reply.raw.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
     };
+    if (memList.length) send("memory_ctx", { count: memList.length });
+
+    // 带记忆的模型消息：把相关记忆作为系统上下文注入（若无命中则原样用 history）
+    const modelMessages: ChatMessage[] = memList.length
+      ? [
+          {
+            role: "system",
+            content:
+              "以下是你记得的与用户/本话题相关的记忆，回答时参考并用自然的方式兑现：\n" +
+              memList.map((m, i) => `${i + 1}. ${m}`).join("\n"),
+          },
+          ...history,
+        ]
+      : history;
 
     // M40 对话式多轮任务执行：命中工作意图（或前端显式 runTask）→ 把该消息跑成真实 Agent 任务
     const shouldRun = req.body?.runTask === true || looksLikeTask(message);
@@ -89,7 +146,7 @@ export async function chatRoutes(app: FastifyInstance) {
     const ch = pickChannel();
     if (ch) {
       try {
-        const full = await chatStream(ch, history, (delta) => send("token", { text: delta }));
+        const full = await chatStream(ch, modelMessages, (delta) => send("token", { text: delta }));
         recordSuccess(ch.id);
         appendChatMessage(sessionId, "assistant", full);
         send("done", { text: full, sessionId });
