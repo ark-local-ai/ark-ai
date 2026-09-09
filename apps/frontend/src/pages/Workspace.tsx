@@ -3,6 +3,7 @@ import { ftColor, ftLabel } from "../data/mock";
 import {
   listSpaces, listSpaceFiles, createSpace, setActiveSpace, deleteSpace,
   workspaceUrl, searchWorkspace, listFileVersions, rollbackFileVersion,
+  webSearch, webRead, type WebSearchHit,
   type SpaceDto, type WorkspaceFileDto, type WorkspaceSearchResult, type FileVersionDto,
 } from "../api";
 
@@ -97,6 +98,30 @@ export default function Workspace() {
     searchWorkspace(v).then(setHits).catch(() => setHits([]));
   };
 
+  // M48 联网搜索：资料库内直接搜真实网络（web.search），可一键 web.read 读正文
+  const [wq, setWq] = useState("");
+  const [whits, setWhits] = useState<WebSearchHit[] | null>(null);
+  const [wloading, setWloading] = useState(false);
+  const [werr, setWerr] = useState("");
+  const [wover, setWover] = useState<Record<string, string>>({}); // url -> 已展开正文
+  const [wreading, setWreading] = useState("");
+  const doWebSearch = async () => {
+    const v = wq.trim();
+    if (!v) return;
+    setWloading(true); setWerr(""); setWover({});
+    const r = await webSearch(v);
+    setWloading(false);
+    if (r.error) { setWhits(null); setWerr(r.error); return; }
+    setWhits(r.hits);
+  };
+  const doRead = async (h: WebSearchHit) => {
+    if (wover[h.url]) { setWover((o) => { const n = { ...o }; delete n[h.url]; return n; }); return; }
+    setWreading(h.url);
+    const r = await webRead(h.url);
+    setWreading("");
+    setWover((o) => ({ ...o, [h.url]: r.error ? `⚠ ${r.error}` : r.text }));
+  };
+
   return (
     <div className="page">
       <div className="workspace-wrap">
@@ -149,6 +174,60 @@ export default function Workspace() {
         </div>
 
         <div>
+          {/* M48 联网搜索面板：资料库内直接搜真实网络，可一键读正文 */}
+          <div className="card" style={{ marginBottom: 14, padding: "14px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <b style={{ fontSize: 13.5 }}>联网搜索</b>
+              <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                搜真实网络（默认免 key · DuckDuckGo），可点开读正文
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="ws-search-input"
+                style={{ flex: 1 }}
+                placeholder="输入想调研/搜索的内容…"
+                value={wq}
+                onChange={(e) => setWq(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && doWebSearch()}
+              />
+              <button className="btn sm" onClick={doWebSearch} disabled={wloading}>
+                {wloading ? "搜索中…" : "搜索"}
+              </button>
+            </div>
+            {werr && <div style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 10 }}>{werr}</div>}
+            {whits && (
+              <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                {whits.length === 0 && (
+                  <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>没有搜到结果</div>
+                )}
+                {whits.map((h, i) => (
+                  <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", background: "var(--surface)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <a href={h.url} target="_blank" rel="noreferrer"
+                        style={{ fontSize: 13, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>
+                        {h.title}
+                      </a>
+                      <button className="btn ghost sm" style={{ marginLeft: "auto" }}
+                        onClick={() => doRead(h)}>
+                        {wreading === h.url ? "读取中…" : wover[h.url] ? "收起" : "读正文"}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {h.url}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 4 }}>{h.snippet}</div>
+                    {wover[h.url] && (
+                      <pre style={{ fontSize: 12, lineHeight: 1.6, color: "var(--text-2)", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", marginTop: 8, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 320, overflow: "auto" }}>
+                        {wover[h.url]}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <b style={{ fontSize: 15 }}>成果文件 · {active?.name ?? "默认工作空间"}</b>
             <span style={{ fontSize: 12, color: "var(--text-3)" }}>真实落盘 · 可直接在 Office 打开继续编辑</span>

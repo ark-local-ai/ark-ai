@@ -123,6 +123,47 @@ export async function searchWorkspace(q: string): Promise<WorkspaceSearchResult[
   return res.json();
 }
 
+// ===== 联网搜索工具（M47/M48：web.search + web.read）=====
+export interface WebSearchHit {
+  title: string;
+  url: string;
+  snippet: string;
+}
+export interface WebSearchResult {
+  query: string;
+  hits: WebSearchHit[];
+  count: number;
+  error?: string;
+}
+
+/** 联网搜索：默认免 key 走 DuckDuckGo，可配 provider。返回真实标题/链接/摘要。 */
+export async function webSearch(query: string): Promise<WebSearchResult> {
+  const res = await authFetch("/api/tools/web.search", {
+    method: "POST",
+    body: JSON.stringify({ query }),
+  });
+  if (!res.ok) {
+    if (res.status === 400) return { query, hits: [], count: 0, error: "查询不能为空" };
+    if (res.status === 401) return { query, hits: [], count: 0, error: "请先登录再联网搜索" };
+    return { query, hits: [], count: 0, error: `联网搜索失败(${res.status})` };
+  }
+  const j = (await res.json()) as WebSearchResult;
+  return j.error ? { query, hits: [], count: 0, error: j.error } : j;
+}
+
+/** 读取网页正文（http/https-only、限长截断）；返回 error 不抛。 */
+export async function webRead(url: string): Promise<{ url: string; title: string; text: string; length: number; error?: string }> {
+  const res = await authFetch("/api/tools/web.read", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const e = (await res.json().catch(() => ({}))) as { error?: string };
+    return { url, title: "", text: "", length: 0, error: e.error ?? `读取失败(${res.status})` };
+  }
+  return res.json() as Promise<{ url: string; title: string; text: string; length: number; error?: string }>;
+}
+
 // ===== 多工作空间（spaces）=====
 export interface SpaceDto {
   id: string;
