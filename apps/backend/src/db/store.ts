@@ -105,6 +105,23 @@ export function insertArtifact(a: Artifact, taskId: string, isDeliverable = 0): 
   ).run(taskId, a.name, a.kind, a.note ?? null, a.path ?? null, isDeliverable);
 }
 
+/**
+ * 幂等清空某任务的全部旧行（steps / artifacts / 主行），用于重试同一 id 前复位，
+ * 也是删除可复用的底层（M17）。
+ */
+export function resetTask(id: string): void {
+  db.prepare(`DELETE FROM steps WHERE task_id = ?`).run(id);
+  db.prepare(`DELETE FROM artifacts WHERE task_id = ?`).run(id);
+  db.prepare(`DELETE FROM tasks WHERE id = ?`).run(id);
+}
+
+/** 删除某任务（含其步骤/产物）；返回该任务原本是否存在 */
+export function deleteTask(id: string): boolean {
+  const existed = !!db.prepare(`SELECT 1 FROM tasks WHERE id = ?`).get(id);
+  resetTask(id);
+  return existed;
+}
+
 // ---- 任务读 ----
 export function getTask(id: string): Task | null {
   const row = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id) as

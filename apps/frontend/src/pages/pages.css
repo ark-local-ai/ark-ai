@@ -29,6 +29,7 @@
 .tcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 18px 20px; }
 .tcard .t-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .tcard .t-h b { font-size: 15px; letter-spacing: -0.2px; }
+.t-actions { display: flex; align-items: center; gap: 8px; }
 .prompt-bar { display: flex; align-items: center; gap: 10px; }
 .steps { list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .step { display: flex; align-items: center; gap: 12px; padding: 8px 11px; border-radius: var(--radius-sm); }

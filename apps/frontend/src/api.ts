@@ -393,6 +393,20 @@ export async function listTasks(): Promise<RecentTaskDto[]> {
   return res.json();
 }
 
+/** 重试任务：把 failed/done 任务用原 prompt 重新入队（M17） */
+export async function retryTask(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/tasks/${id}/retry`, {
+    method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error(`重试任务失败: ${res.status}`);
+}
+
+/** 删除任务（含其步骤/产物）（M17） */
+export async function deleteTask(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/tasks/${id}`, { method: "DELETE", headers: authHeaders() });
+  if (!res.ok) throw new Error(`删除任务失败: ${res.status}`);
+}
+
 // ===== 本地用户认证（M12）=====
 const TOKEN_KEY = "ark_session_token";
 

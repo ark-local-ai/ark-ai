@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { IconCheck } from "../components/icons";
 import { ftColor, ftLabel } from "../data/mock";
-import { getTask, subscribeTask, workspaceUrl, type TaskDto } from "../api";
+import { getTask, subscribeTask, retryTask, deleteTask, workspaceUrl, type TaskDto } from "../api";
 
 export default function TaskPage() {
   const [params] = useSearchParams();
+  const nav = useNavigate();
   const taskId = params.get("taskId");
   const [task, setTask] = useState<TaskDto | null>(null);
   const [missing, setMissing] = useState(false);
+  const [busy, setBusy] = useState(false);
   const taskRef = useRef(task);
   taskRef.current = task;
 
@@ -45,6 +47,9 @@ export default function TaskPage() {
         if (checks.every((c) => c.ok)) next.status = "done";
       } else if (ev.type === "done") {
         next.status = "done";
+      } else if (ev.type === "error") {
+        // M16 失败兜底广播 error：UI 立即翻转为失败态
+        next.status = "failed";
       }
       setTask(next);
     });
@@ -74,12 +79,44 @@ export default function TaskPage() {
     : task.status === "failed" ? <span className="badge warn">失败</span>
     : <span className="badge queue">排队中</span>;
 
+  const doRetry = async () => {
+    if (!taskId || busy) return;
+    setBusy(true);
+    try {
+      await retryTask(taskId);
+      setTask({ ...task, status: "queue" });
+      // 重新连 SSE 拿进度（retry 消息已发出，订阅覆盖后续）
+      getTask(taskId).then(setTask).catch(() => {});
+    } catch {
+      // 提示由调用失败静默（后端不可达等）
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doDelete = async () => {
+    if (!taskId) return;
+    try {
+      await deleteTask(taskId);
+      nav("/app/task");
+    } catch { /* 忽略 */ }
+  };
+
+
   return (
     <div className="page">
       <div className="taskwrap">
         <div className="task-col">
           <div className="tcard">
-            <div className="t-h"><b>{task.title}</b>{badge}</div>
+            <div className="t-h">
+              <b>{task.title}</b>{badge}
+              <span className="t-actions">
+                {(task.status === "failed" || task.status === "done") && (
+                  <button className="btn ghost sm" disabled={busy} onClick={doRetry}>重试</button>
+                )}
+                <button className="btn ghost sm danger" onClick={doDelete}>删除</button>
+              </span>
+            </div>
             <div className="prompt-bar"><span>{task.prompt}</span></div>
             <ul className="steps">
               {task.steps.map((s) => {
