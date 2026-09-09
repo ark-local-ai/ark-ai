@@ -18,6 +18,7 @@ const resetTables = () => {
     DELETE FROM users;
     DELETE FROM sessions;
     DELETE FROM task_templates;
+    DELETE FROM file_versions;
   `);
 };
 
@@ -319,5 +320,37 @@ describe("任务模板（M33）", () => {
     const t = store.getTaskTemplate(id)!;
     expect(t.skills).toBeUndefined();
     expect(t.expert).toBeUndefined();
+  });
+});
+
+describe("交付版本历史（C5 store）", () => {
+  it("addFileVersion 同文件 seq 递增、listFileVersions 倒序、getFileVersion 命中", () => {
+    const s1 = store.addFileVersion("报告.pptx", "t1", "_ark_versions/报告.pptx/1-报告.pptx");
+    const s2 = store.addFileVersion("报告.pptx", "t2", "_ark_versions/报告.pptx/2-报告.pptx");
+    const s3 = store.addFileVersion("报告.pptx", undefined, "_ark_versions/报告.pptx/3-报告.pptx");
+    expect(s1).toBe(1);
+    expect(s2).toBe(2);
+    expect(s3).toBe(3);
+    const list = store.listFileVersions("报告.pptx");
+    expect(list).toHaveLength(3);
+    expect(list[0].seq).toBe(3); // 倒序：最新在前
+    expect(list[0].taskId).toBeNull(); // SQLite 无值读回 null
+    expect(list[1].taskId).toBe("t2");
+    expect(store.getFileVersion("报告.pptx", 2)?.taskId).toBe("t2");
+    expect(store.getFileVersion("报告.pptx", 99)).toBeNull();
+  });
+
+  it("不同文件名版本互不影响", () => {
+    store.addFileVersion("A.xlsx", "t1", "a");
+    store.addFileVersion("B.xlsx", "t1", "b");
+    expect(store.listFileVersions("A.xlsx")).toHaveLength(1);
+    expect(store.listFileVersions("B.xlsx")).toHaveLength(1); // 各自从 1 开始
+  });
+
+  it("deleteFileVersions 清空该文件版本记录", () => {
+    store.addFileVersion("C.xlsx", "t1", "c1");
+    store.addFileVersion("C.xlsx", "t2", "c2");
+    store.deleteFileVersions("C.xlsx");
+    expect(store.listFileVersions("C.xlsx")).toHaveLength(0);
   });
 });

@@ -333,6 +333,15 @@ db.exec(`
     user_id TEXT,
     created TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS file_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_name TEXT NOT NULL,
+    task_id TEXT,
+    seq INTEGER NOT NULL DEFAULT 1,
+    ts TEXT NOT NULL,
+    archived TEXT NOT NULL
+  );
 `);
 
 export interface ChatSessionRow {
@@ -766,4 +775,42 @@ export function deleteTaskTemplate(id: string): boolean {
   const existed = !!db.prepare(`SELECT 1 FROM task_templates WHERE id = ?`).get(id);
   if (existed) db.prepare(`DELETE FROM task_templates WHERE id = ?`).run(id);
   return existed;
+}
+
+// ---- C5 交付版本历史：file_versions 表（每个文件名一条递增 seq 的版本记录） ----
+export interface FileVersion {
+  id: number;
+  file_name: string;
+  taskId?: string;
+  seq: number;
+  ts: string;
+  archived: string; // 版本快照的存档相对路径（相对工作空间根）
+}
+
+/** 追加一个版本记录，返回新 seq（同文件名按 1 递增） */
+export function addFileVersion(fileName: string, taskId: string | undefined, archived: string): number {
+  const cur = db.prepare(`SELECT COALESCE(MAX(seq),0)+1 AS s FROM file_versions WHERE file_name = ?`).get(fileName) as { s: number };
+  const seq = Number(cur.s);
+  db.prepare(
+    `INSERT INTO file_versions (file_name, task_id, seq, ts, archived) VALUES (?, ?, ?, ?, ?)`,
+  ).run(fileName, taskId ?? null, seq, new Date().toLocaleString("zh-CN", { hour12: false }), archived);
+  return seq;
+}
+
+export function listFileVersions(fileName: string): FileVersion[] {
+  return db.prepare(
+    `SELECT id, file_name, task_id AS taskId, seq, ts, archived FROM file_versions WHERE file_name = ? ORDER BY seq DESC`,
+  ).all(fileName) as unknown as FileVersion[];
+}
+
+export function getFileVersion(fileName: string, seq: number): FileVersion | null {
+  const r = db.prepare(
+    `SELECT id, file_name, task_id AS taskId, seq, ts, archived FROM file_versions WHERE file_name = ? AND seq = ?`,
+  ).get(fileName, seq) as FileVersion | undefined;
+  return r ?? null;
+}
+
+/** 删除某文件名的全部版本记录（配合工作目录清理） */
+export function deleteFileVersions(fileName: string): void {
+  db.prepare(`DELETE FROM file_versions WHERE file_name = ?`).run(fileName);
 }

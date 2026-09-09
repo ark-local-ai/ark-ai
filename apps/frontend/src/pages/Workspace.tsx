@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ftColor, ftLabel } from "../data/mock";
 import {
   listSpaces, listSpaceFiles, createSpace, setActiveSpace, deleteSpace,
-  workspaceUrl, searchWorkspace, type SpaceDto, type WorkspaceFileDto, type WorkspaceSearchResult,
+  workspaceUrl, searchWorkspace, listFileVersions, rollbackFileVersion,
+  type SpaceDto, type WorkspaceFileDto, type WorkspaceSearchResult, type FileVersionDto,
 } from "../api";
 
 export default function Workspace() {
@@ -12,6 +13,23 @@ export default function Workspace() {
   const [err, setErr] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+
+  // C5 版本历史面板
+  const [verName, setVerName] = useState<string | null>(null);
+  const [vers, setVers] = useState<FileVersionDto[]>([]);
+  const openVersions = async (name: string) => {
+    setVerName(name);
+    try { setVers(await listFileVersions(name)); } catch { setVers([]); }
+  };
+  const doRollback = async (seq: number) => {
+    if (!verName) return;
+    try {
+      await rollbackFileVersion(verName, seq);
+      setVers(await listFileVersions(verName));
+      loadFiles(activeId);
+      alert("已回滚到该版本");
+    } catch (e) { console.error(e); alert("回滚失败"); }
+  };
 
   // 加载空间列表，默认选中活动空间
   const loadSpaces = () => {
@@ -172,6 +190,7 @@ export default function Workspace() {
                   <div className="fmeta">{f.sizeText} · {f.time}</div>
                   <div className="fops">
                     <a className="btn soft sm" href={workspaceUrl(f.name, activeId)} download>下载</a>
+                    <button className="btn soft sm" onClick={() => openVersions(f.name)}>版本</button>
                   </div>
                 </div>
               ))}
@@ -179,6 +198,28 @@ export default function Workspace() {
           )}
         </div>
       </div>
+
+      {verName && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.28)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => setVerName(null)}>
+          <div className="card" style={{ width: 380, maxWidth: "90vw", maxHeight: 420, overflow: "auto", padding: "16px 18px" }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <b style={{ fontSize: 13.5 }}>{verName} · 版本历史</b>
+              <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setVerName(null)}>关闭</button>
+            </div>
+            {vers.length === 0 && (
+              <div style={{ fontSize: 12.5, color: "var(--text-3)", padding: "6px 0" }}>该文件暂无历史版本</div>
+            )}
+            {vers.map((v) => (
+              <div key={v.seq} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--line)" }}>
+                <span style={{ fontSize: 12.5, color: "var(--text-2)" }}>v{v.seq} · {v.ts}</span>
+                <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => doRollback(v.seq)}>回滚</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

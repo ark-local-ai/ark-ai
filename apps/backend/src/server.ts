@@ -21,6 +21,7 @@ import { installAuthGate } from "./routes/guard.js";
 import { queueRoutes } from "./routes/queue.js";
 import { maintenanceRoutes } from "./routes/maintenance.js";
 import { templateRoutes } from "./routes/templates.js";
+import { versionRoutes } from "./routes/versions.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { searchWorkspaceFiles } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
@@ -61,6 +62,7 @@ export async function buildApp() {
   app.register(queueRoutes, { prefix: "/api/queue" });
   app.register(maintenanceRoutes, { prefix: "/api/maintenance" });
   app.register(templateRoutes, { prefix: "/api/templates" });
+  app.register(versionRoutes, { prefix: "/api/versions" });
 
   // 工作空间列表：?space=<id> 指定空间目录，缺省扫根（默认工作空间）
   app.get("/api/workspace", async (req) => {

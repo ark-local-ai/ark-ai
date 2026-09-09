@@ -8,6 +8,7 @@ import {
 import { publish } from "./events";
 import { planTask } from "./planner";
 import { genOffice, detectKind, type StepContent, type OfficeKind } from "../tools/office";
+import { snapshotDeliverable } from "../tools/fileVersions";
 
 /** C2：任务创建时的可选 Agent 配置——由模板/前端带入，让 expert/skills/model 真正落进任务与路由 */
 export interface AgentOptions {
@@ -120,6 +121,8 @@ async function runPlanSteps(opts: {
       };
       insertArtifact(deliver, id, 1);
       task.deliverable = deliver;
+      // C5：每次产出交付即快照进版本历史（_ark_versions/<name>/<seq>-<name> + file_versions 表）
+      snapshotDeliverable(dir, deliver.name, id);
       log.info({ deliverable: deliver.name }, "task deliverable created");
       publish({ type: "deliver", taskId: id, data: deliver });
     }

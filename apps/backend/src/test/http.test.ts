@@ -279,3 +279,19 @@ describe("C3 认证硬门禁（写请求需登录）", () => {
     }
   });
 });
+
+describe("交付版本 API（C5）", () => {
+  it("GET /api/versions/:name 返回历史（无则空数组）；非法名 400", async () => {
+    const empty = await get("/api/versions/report.pptx");
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toEqual([]);
+
+    const bad = await get(`/api/versions/${encodeURIComponent("a/b")}`);
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it("POST /:name/rollback 缺 seq → 400", async () => {
+    const r = await post("/api/versions/report.pptx/rollback", {});
+    expect(r.statusCode).toBe(400);
+  });
+});

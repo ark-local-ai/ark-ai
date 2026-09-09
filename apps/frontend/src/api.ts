@@ -682,3 +682,22 @@ export async function saveTaskAsTemplate(id: string, name?: string): Promise<str
   const data = (await res.json()) as { id: string };
   return data.id;
 }
+
+// ===== C5 交付版本历史 =====
+export interface FileVersionDto { seq: number; ts: string; taskId?: string | null; }
+
+export async function listFileVersions(name: string): Promise<FileVersionDto[]> {
+  const res = await fetch(`${BASE}/api/versions/${encodeURIComponent(name)}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`获取版本失败: ${res.status}`);
+  return res.json();
+}
+
+export async function rollbackFileVersion(name: string, seq: number): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE}/api/versions/${encodeURIComponent(name)}/rollback`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ seq }),
+  });
+  if (!res.ok) throw new Error(`回滚失败: ${res.status}`);
+  return res.json();
+}
