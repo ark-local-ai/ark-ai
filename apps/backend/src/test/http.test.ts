@@ -138,3 +138,26 @@ describe("对话搜索路由", () => {
     expect(hits[0].sessionId).toBe(sid);
   });
 });
+
+describe("维护 API（M32）", () => {
+  it("POST /api/maintenance/cleanup 返回清理汇总（含审计裁剪）", async () => {
+    // 造几条审计日志，触发裁剪
+    for (let i = 0; i < 3; i++) store.appendAudit({ action: `动作${i}` });
+    const r = await post("/api/maintenance/cleanup", {});
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as {
+      enabled: boolean;
+      tasksDeleted: number;
+      filesDeleted: number;
+      auditPruned: number;
+      taskRetentionDays: number;
+      auditKeepMax: number;
+    };
+    expect(body.enabled).toBe(true);
+    expect(typeof body.tasksDeleted).toBe("number");
+    expect(typeof body.filesDeleted).toBe("number");
+    expect(typeof body.auditPruned).toBe("number");
+    expect(body.taskRetentionDays).toBeGreaterThan(0);
+    expect(body.auditKeepMax).toBeGreaterThan(0);
+  });
+});

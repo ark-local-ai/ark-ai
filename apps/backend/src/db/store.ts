@@ -67,16 +67,24 @@ if (!taskCols.some((c) => c.name === "archived")) {
   db.exec(`ALTER TABLE tasks ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
 }
 
+// ---- 迁移：任务创建时间戳（tasks.created_ts，epoch ms，M32 清理按龄用）----
+// 旧行没有该列：补列后把既有记录统一回填为当前时间——本地既有数据的 created 是 zh-CN locale
+// 字符串，无法可靠解析为 epoch，按"现在"记既安全又避免一迁移就被按龄清除。
+if (!taskCols.some((c) => c.name === "created_ts")) {
+  db.exec(`ALTER TABLE tasks ADD COLUMN created_ts INTEGER`);
+  db.exec(`UPDATE tasks SET created_ts = ${Date.now()}`);
+}
+
 // ---- 任务写 / 读（node:sqlite 同步 API，prepare().run() / .get() / .all()）----
 export function insertTask(task: Task, userId?: string): void {
   db.prepare(
-    `INSERT INTO tasks (id, title, prompt, status, model, expert, skills, workspace, checks, timeline, created, archived, user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tasks (id, title, prompt, status, model, expert, skills, workspace, checks, timeline, created, created_ts, archived, user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id, task.title, task.prompt, task.status, task.model, task.expert,
     JSON.stringify(task.skills), task.workspace,
     JSON.stringify(task.checks), JSON.stringify(task.timeline), task.created,
-    task.archived ? 1 : 0, userId ?? null,
+    Date.now(), task.archived ? 1 : 0, userId ?? null,
   );
 }
 
@@ -127,6 +135,33 @@ export function deleteTask(id: string): boolean {
   const existed = !!db.prepare(`SELECT 1 FROM tasks WHERE id = ?`).get(id);
   resetTask(id);
   return existed;
+}
+
+// ---- M32 自动清理：按龄取可清理的终态任务 / 取交付文件 / 裁剪审计 ----
+/** 取创建时间早于 `olderThanMs` 的**终态**（done/failed）任务 id（running/queue/归档都不动） */
+export function getCleanableTaskIds(olderThanMs: number): { id: string }[] {
+  return db.prepare(
+    `SELECT id FROM tasks
+     WHERE status IN ('done','failed') AND archived = 0 AND created_ts IS NOT NULL AND created_ts < ?
+     ORDER BY created_ts ASC`,
+  ).all(olderThanMs) as { id: string }[];
+}
+
+/** 取这些任务的交付文件名（artifacts.path 只存文件名；绝对路径由调用方按工作目录拼装） */
+export function listDeliverableFiles(taskIds: string[]): { taskId: string; path: string }[] {
+  if (taskIds.length === 0) return [];
+  const ph = taskIds.map(() => "?").join(",");
+  return db.prepare(
+    `SELECT task_id AS taskId, path FROM artifacts WHERE is_deliverable = 1 AND path IS NOT NULL AND task_id IN (${ph})`,
+  ).all(...taskIds) as { taskId: string; path: string }[];
+}
+
+/** 裁剪审计日志：只保留最新 keepMax 条（按 id 倒序），返回删除条数 */
+export function pruneAudit(keepMax: number): number {
+  const r = db.prepare(
+    `DELETE FROM audit_log WHERE id NOT IN (SELECT id FROM audit_log ORDER BY id DESC LIMIT ?)`,
+  ).run(keepMax);
+  return Number(r.changes);
 }
 
 /**

@@ -5,6 +5,7 @@
 
 import { db } from "../db/store";
 import { runTask } from "../agent/orchestrator";
+import { runCleanup } from "../maintenance/cleanup.js";
 
 export interface Job {
   id: string;
@@ -142,11 +143,18 @@ export async function runJob(id: string): Promise<boolean> {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 const lastFiredAt = new Map<string, string>(); // id -> "HH:MM" 防同一分钟内重复触发
+let lastCleanup = 0; // 上次自动清理时间戳（epoch ms），每 6h 跑一次
+const CLEANUP_INTERVAL_MS = 6 * 3600 * 1000;
 
 /** 启动本地调度器（幂等）。每 30s 检查一次。 */
 export function startScheduler(): void {
   if (timer) return;
   timer = setInterval(() => {
+    // M32：定时自动清理 —— 每 6 小时跑一次（过期任务/交付文件/审计裁剪）
+    if (Date.now() - lastCleanup >= CLEANUP_INTERVAL_MS) {
+      lastCleanup = Date.now();
+      try { runCleanup(); } catch { /* 不因清理失败拖垮调度器 */ }
+    }
     const now = new Date();
     const minuteOfDay = now.getHours() * 60 + now.getMinutes();
     const key = `${now.getHours()}:${now.getMinutes()}`;

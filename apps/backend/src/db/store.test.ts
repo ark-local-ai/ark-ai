@@ -209,3 +209,68 @@ describe("audit", () => {
     store.clearAudit();
   });
 });
+
+describe("cleanup 自动清理（M32）", () => {
+  const setAge = (id: string, msAgo: number) =>
+    db.prepare(`UPDATE tasks SET created_ts = ? WHERE id = ?`).run(Date.now() - msAgo, id);
+
+  it("getCleanableTaskIds 只取旧的终态任务（不动 running/queue/归档）", () => {
+    // 老终态 → 应可清理
+    store.insertTask(taskWithStatus("doneOld", "done"));
+    setAge("doneOld", 100 * 24 * 3600 * 1000);
+    store.insertTask(taskWithStatus("failOld", "failed"));
+    setAge("failOld", 100 * 24 * 3600 * 1000);
+    // 新终态 → 不应清理
+    store.insertTask(taskWithStatus("doneNew", "done"));
+    setAge("doneNew", 1000);
+    // 非终态 → 不应清理
+    store.insertTask(taskWithStatus("runOld", "running"));
+    setAge("runOld", 100 * 24 * 3600 * 1000);
+    // 已归档 → 不应清理
+    store.insertTask(taskWithStatus("archOld", "done", { archived: true }));
+    setAge("archOld", 100 * 24 * 3600 * 1000);
+
+    const ids = store.getCleanableTaskIds(Date.now() - 30 * 24 * 3600 * 1000).map((t) => t.id);
+    expect(ids).toContain("doneOld");
+    expect(ids).toContain("failOld");
+    expect(ids).not.toContain("doneNew");
+    expect(ids).not.toContain("runOld");
+    expect(ids).not.toContain("archOld");
+  });
+
+  it("listDeliverableFiles 取到 is_deliverable=1 且带 path 的文件名", () => {
+    store.insertTask(taskWithStatus("t1", "done"));
+    store.insertArtifact({ name: "报告.pptx", kind: "office", note: "x", path: "报告.pptx" }, "t1", 1);
+    store.insertArtifact({ name: "草稿.txt", kind: "text", note: "x", path: "草稿.txt" }, "t1", 0); // 非交付
+    store.insertTask(taskWithStatus("t2", "done"));
+    store.insertArtifact({ name: "表.xlsx", kind: "office", path: "表.xlsx" }, "t2", 1);
+
+    const files = store.listDeliverableFiles(["t1", "t2", "notExist"]);
+    expect(files).toHaveLength(2);
+    expect(files.map((f) => f.path).sort()).toEqual(["报告.pptx", "表.xlsx"]);
+  });
+
+  it("listDeliverableFiles 空入参安全返回空数组", () => {
+    expect(store.listDeliverableFiles([])).toEqual([]);
+  });
+
+  it("pruneAudit 只保留最新 keepMax 条", () => {
+    store.clearAudit();
+    for (let i = 0; i < 6; i++) store.appendAudit({ action: `动作${i}` });
+    const removed = store.pruneAudit(2);
+    expect(removed).toBe(4);
+    const rows = store.listAudit();
+    expect(rows.length).toBe(2);
+    expect(rows[0].action).toBe("动作5"); // 最新在前
+    expect(rows[1].action).toBe("动作4");
+    store.clearAudit();
+  });
+
+  it("insertTask 写入 created_ts（epoch ms）", () => {
+    const before = Date.now();
+    store.insertTask(taskWithStatus("ts1", "queue"));
+    const row = db.prepare(`SELECT created_ts FROM tasks WHERE id = 'ts1'`).get() as { created_ts: number };
+    expect(row.created_ts).toBeGreaterThanOrEqual(before);
+    expect(row.created_ts).toBeLessThanOrEqual(Date.now());
+  });
+});
