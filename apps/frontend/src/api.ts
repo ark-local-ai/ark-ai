@@ -324,6 +324,29 @@ export async function listChannels(): Promise<ChannelDto[]> {
   return res.json();
 }
 
+// ===== 统计仪表盘（M18）=====
+export interface StatsDto {
+  tasks: {
+    total: number;
+    byStatus: Record<string, number>;
+    recent: { id: string; title: string; created: string; status: string }[];
+  };
+  channels: {
+    total: number;
+    avgRate: number;
+    avgLatency: number | null;
+    avgScore: number;
+    best: { id: string; name: string; model: string; score: number } | null;
+  };
+}
+
+export async function getStats(): Promise<StatsDto> {
+  const res = await fetch(`${BASE}/api/stats`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`获取统计失败: ${res.status}`);
+  return res.json();
+}
+
+
 export async function createChannel(p: { name: string; proto: "openai" | "anthropic"; model: string; baseUrl: string; apiKey?: string }): Promise<ChannelDto> {
   const res = await fetch(`${BASE}/api/channels`, {
     method: "POST",

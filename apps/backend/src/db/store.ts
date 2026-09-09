@@ -162,6 +162,19 @@ export function getTask(id: string): Task | null {
   };
 }
 
+/** 任务各状态计数（供统计仪表盘 M18） */
+export function countTasksByStatus(): Record<string, number> {
+  const rows = db.prepare(`SELECT status, COUNT(*) AS n FROM tasks GROUP BY status`).all() as
+    { status: string; n: number }[];
+  return rows.reduce<Record<string, number>>((acc, r) => { acc[r.status] = r.n; return acc; }, {});
+}
+
+/** 最近 N 个任务（含状态+标题，供仪表盘最近动态） */
+export function recentTasks(limit = 8): { id: string; title: string; created: string; status: string }[] {
+  return db
+    .prepare(`SELECT id, title, created, status FROM tasks ORDER BY created DESC LIMIT ?`)
+    .all(limit) as { id: string; title: string; created: string; status: string }[];
+}
 export interface TaskSummary {
   id: string;
   title: string;

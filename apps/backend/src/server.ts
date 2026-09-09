@@ -13,6 +13,7 @@ import { connectorRoutes } from "./routes/connectors.js";
 import { scenarioRoutes } from "./routes/scenarios.js";
 import { spaceRoutes, resolveSpaceDir } from "./routes/spaces.js";
 import { authRoutes } from "./routes/auth.js";
+import { statsRoutes } from "./routes/stats.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { startScheduler } from "./scheduler/jobs.js";
 import { pruneSessions } from "./db/store.js";
@@ -36,6 +37,7 @@ export async function buildApp() {
   app.register(scenarioRoutes, { prefix: "/api/scenarios" });
   app.register(spaceRoutes, { prefix: "/api/spaces" });
   app.register(authRoutes, { prefix: "/api/auth" });
+  app.register(statsRoutes, { prefix: "/api/stats" });
 
   // 工作空间列表：?space=<id> 指定空间目录，缺省扫根（默认工作空间）
   app.get("/api/workspace", async (req) => {

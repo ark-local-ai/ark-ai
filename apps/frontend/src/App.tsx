@@ -11,6 +11,7 @@ import Automation from "./pages/Automation";
 import Settings from "./pages/Settings";
 import Workspace from "./pages/Workspace";
 import TaskPage from "./pages/TaskPage";
+import Stats from "./pages/Stats";
 
 import "./index.css";
 import "./layout/shell.css";
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="automation" element={<Automation />} />
           <Route path="settings" element={<Settings />} />
           <Route path="workspace" element={<Workspace />} />
+          <Route path="stats" element={<Stats />} />
           <Route path="task" element={<TaskPage />} />
         </Route>
       </Routes>

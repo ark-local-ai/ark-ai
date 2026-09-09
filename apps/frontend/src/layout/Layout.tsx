@@ -13,6 +13,7 @@ const TITLES: Record<string, string> = {
   "/app/automation": "自动化",
   "/app/workspace": "资料库",
   "/app/settings": "设置",
+  "/app/stats": "统计",
   "/app/task": "任务",
 };
 

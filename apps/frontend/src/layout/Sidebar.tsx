@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   IconAssistant, IconChevD, IconChevD2, IconChevU2, IconClock, IconDoc,
   IconFolder, IconFolderOpen, IconGear, IconLibrary, IconLink, IconNote, IconSearch,
-  IconShare, IconRename, IconDots, IconSpark, IconTrash, IconUsers,
+  IconShare, IconRename, IconDots, IconSpark, IconTrash, IconUsers, IconChart,
   ArkLogo, IconCollapse,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
@@ -25,6 +25,7 @@ const NAV = [
   },
   { to: "/app/automation", label: "自动化", icon: <IconClock size={15} />, sub: null },
   { to: "/app/workspace", label: "资料库", icon: <IconLibrary size={15} />, sub: null },
+  { to: "/app/stats", label: "统计", icon: <IconChart size={15} />, sub: null },
 ];
 
 export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
