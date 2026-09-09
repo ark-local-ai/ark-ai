@@ -342,6 +342,18 @@ db.exec(`
     ts TEXT NOT NULL,
     archived TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS experts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    icon TEXT,
+    color TEXT,
+    desc TEXT,
+    skills TEXT,
+    connectors TEXT,
+    user_id TEXT,
+    created TEXT NOT NULL
+  );
 `);
 
 export interface ChatSessionRow {
@@ -813,4 +825,66 @@ export function getFileVersion(fileName: string, seq: number): FileVersion | nul
 /** 删除某文件名的全部版本记录（配合工作目录清理） */
 export function deleteFileVersions(fileName: string): void {
   db.prepare(`DELETE FROM file_versions WHERE file_name = ?`).run(fileName);
+}
+
+// ---- C6 用户自建专家：experts 表（内置专家为静态种子，用户自建落库、多用户隔离） ----
+export interface ExpertRow {
+  id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+  desc?: string;
+  skills?: string;
+  connectors?: string;
+  created: string;
+}
+
+export function createExpert(
+  e: { name: string; icon?: string; color?: string; desc?: string; skills?: string; connectors?: string },
+  userId?: string,
+): string {
+  const id = Math.random().toString(36).slice(2, 10);
+  db.prepare(
+    `INSERT INTO experts (id, name, icon, color, desc, skills, connectors, user_id, created)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, e.name, e.icon ?? null, e.color ?? null, e.desc ?? null,
+    e.skills ?? null, e.connectors ?? null, userId ?? null,
+    new Date().toLocaleString("zh-CN", { hour12: false }),
+  );
+  return id;
+}
+
+/** 只列出用户自建 + 全局专家（用户私有隔离；内置种子由路由层拼接） */
+export function listCustomExperts(userId?: string): ExpertRow[] {
+  return db.prepare(
+    `SELECT id, name, icon, color, desc, skills, connectors, created
+     FROM experts
+     WHERE user_id = ? OR user_id IS NULL
+     ORDER BY created DESC`,
+  ).all(userId ?? null) as unknown as ExpertRow[];
+}
+
+export function updateExpert(id: string, patch: Partial<{ name: string; icon: string; color: string; desc: string; skills: string; connectors: string }>): boolean {
+  const existed = !!db.prepare(`SELECT 1 FROM experts WHERE id = ?`).get(id);
+  if (!existed) return false;
+  const cur = db.prepare(
+    `SELECT id, name, icon, color, desc, skills, connectors FROM experts WHERE id = ?`,
+  ).get(id) as unknown as ExpertRow;
+  const name = patch.name ?? cur.name;
+  const icon = patch.icon !== undefined ? patch.icon : (cur.icon ?? "");
+  const color = patch.color !== undefined ? patch.color : (cur.color ?? "");
+  const desc = patch.desc !== undefined ? patch.desc : (cur.desc ?? "");
+  const skills = patch.skills !== undefined ? patch.skills : (cur.skills ?? "");
+  const connectors = patch.connectors !== undefined ? patch.connectors : (cur.connectors ?? "");
+  db.prepare(
+    `UPDATE experts SET name = ?, icon = ?, color = ?, desc = ?, skills = ?, connectors = ? WHERE id = ?`,
+  ).run(name, icon || null, color || null, desc || null, skills || null, connectors || null, id);
+  return true;
+}
+
+export function deleteExpert(id: string): boolean {
+  const existed = !!db.prepare(`SELECT 1 FROM experts WHERE id = ?`).get(id);
+  if (existed) db.prepare(`DELETE FROM experts WHERE id = ?`).run(id);
+  return existed;
 }

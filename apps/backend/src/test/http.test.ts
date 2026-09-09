@@ -50,6 +50,9 @@ async function putTemplate(id: string, body: unknown): Promise<LightMyRequestRes
 async function delTemplate(id: string): Promise<LightMyRequestResponse> {
   return app.inject({ method: "DELETE", url: `/api/templates/${id}` });
 }
+async function injectJson(method: "POST" | "PUT" | "DELETE", url: string, body?: unknown): Promise<LightMyRequestResponse> {
+  return app.inject({ method, url, payload: body as Record<string, unknown> | undefined });
+}
 
 describe("认证 API", () => {
   it("register → me → login → 错密 401 → logout → me 401", async () => {
@@ -293,5 +296,46 @@ describe("交付版本 API（C5）", () => {
   it("POST /:name/rollback 缺 seq → 400", async () => {
     const r = await post("/api/versions/report.pptx/rollback", {});
     expect(r.statusCode).toBe(400);
+  });
+});
+
+describe("用户自建专家 API（C6）", () => {
+  it("POST 创建 → GET 列表含自定义 → PUT 编辑 → DELETE 删除", async () => {
+    // 创建（无认证门禁：ARK_REQUIRE_AUTH=0）
+    const c = await injectJson("POST", "/api/experts", { name: "行业投研专家", desc: "行业研究", skills: "2" });
+    expect(c.statusCode).toBe(201);
+    const { id } = c.json() as { id: string };
+    expect(id).toBeTruthy();
+
+    // 列表包含内置 + 自定义
+    const list = await get("/api/experts");
+    expect(list.statusCode).toBe(200);
+    const arr = list.json() as { id: string; builtin: boolean; name: string }[];
+    expect(arr.some((x) => x.id === id && !x.builtin && x.name === "行业投研专家")).toBe(true);
+    expect(arr.some((x) => x.builtin)).toBe(true); // 内置种子仍在
+
+    // 编辑
+    const up = await injectJson("PUT", `/api/experts/${id}`, { desc: "更新后的简介" });
+    expect(up.statusCode).toBe(200);
+
+    // 删除
+    const del = await injectJson("DELETE", `/api/experts/${id}`, undefined);
+    expect(del.statusCode).toBe(200);
+    const after = await get("/api/experts");
+    const arr2 = after.json() as { id: string }[];
+    expect(arr2.some((x) => x.id === id)).toBe(false);
+  });
+
+  it("创建缺 name → 400；删除不存在 → 404；专家写操作落审计", async () => {
+    const bad = await injectJson("POST", "/api/experts", { desc: "没名字" });
+    expect(bad.statusCode).toBe(400);
+
+    const nf = await injectJson("DELETE", "/api/experts/nope", undefined);
+    expect(nf.statusCode).toBe(404);
+
+    // 审计应记录创建/删除专家
+    const audit = await get("/api/audit");
+    const rows = audit.json() as { action: string }[];
+    expect(rows.some((x) => x.action.includes("专家"))).toBe(true);
   });
 });

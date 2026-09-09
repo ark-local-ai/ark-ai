@@ -222,3 +222,31 @@
   color: var(--text-3); font-size: 15px; line-height: 1;
 }
 .ws-clear:hover { color: var(--danger); }
+
+/* ===== 专家自建编辑器（C6）===== */
+.ex-editor {
+  border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
+  background: var(--surface); padding: 16px 18px; margin-bottom: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.exe-h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.exe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.exe-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.exe-grid input, .exe-grid textarea {
+  padding: 7px 10px; font-size: 13px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface); color: var(--text-1); outline: none;
+  font-family: inherit; resize: vertical;
+}
+.exe-grid input:focus, .exe-grid textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.exe-wide { grid-column: 1 / -1; }
+.exe-ft { display: flex; justify-content: flex-end; margin-top: 14px; }
+.btn.danger { background: var(--danger-bg); color: var(--danger); border-color: transparent; }
+.btn.danger:hover:not(:disabled) { background: #f6d8d8; }
+
+/* ===== 新建技能表单（C6）===== */
+.skill-new { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.skill-new input {
+  flex: 1; padding: 6px 10px; font-size: 12.5px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface); color: var(--text-1); outline: none;
+}
+.skill-new input:focus { border-color: var(--brand); }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, NavLink } from "react-router-dom";
-import { IconUsers, IconSpark, IconLink } from "../components/icons";
-import { listSkills, getSkill, saveSkill, toggleSkill, type SkillDto } from "../api";
+import { IconUsers, IconSpark, IconLink, IconPlus, IconTrash } from "../components/icons";
+import { listSkills, getSkill, saveSkill, createSkill, deleteSkill, toggleSkill, type SkillDto } from "../api";
 
 const TABS = [
   { to: "/app/experts", label: "专家", icon: <IconUsers size={14} />, desc: "内置专家与技能库 —— 按专业流程拆解任务、逐项执行。交付可验收的成果，而不是聊天记录。" },
@@ -19,6 +19,9 @@ export default function Skills() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [newId, setNewId] = useState("");
+  const [newName, setNewName] = useState("");
 
   useEffect(() => {
     listSkills()
@@ -58,6 +61,27 @@ export default function Skills() {
     if (sel?.id === updated.id) setSel(updated);
   };
 
+  const doCreate = async () => {
+    const id = newId.trim();
+    if (!id) return;
+    try {
+      const created = await createSkill(id, { name: newName.trim() || id, desc: "", enabled: true, code: "# 技能：" + (newName.trim() || id) + "\n" });
+      setNewOpen(false); setNewId(""); setNewName("");
+      setList((ls) => [...ls, created]);
+      setSelId(id);
+    } catch { /* 忽略创建失败 */ }
+  };
+
+  const doDelete = async (s: SkillDto) => {
+    if (!window.confirm(`删除技能「${s.name}」？改完的 .md 文件将一并删除。`)) return;
+    try {
+      await deleteSkill(s.id);
+      const next = list.filter((x) => x.id !== s.id);
+      setList(next);
+      if (sel?.id === s.id) setSelId(next[0]?.id ?? null);
+    } catch { /* 忽略删除失败 */ }
+  };
+
   return (
     <div className="page">
       <header className="pn-hd">
@@ -76,7 +100,17 @@ export default function Skills() {
           <div className="sec-h">
             <b>技能库</b>
             <span style={{ fontSize: 11, color: "var(--text-3)" }}>Markdown 即技能 · 改完即生效</span>
+            <button className="btn soft sm" style={{ marginLeft: "auto" }} onClick={() => setNewOpen((v) => !v)}>
+              <IconPlus size={13} /> 新建
+            </button>
           </div>
+          {newOpen && (
+            <div className="skill-new">
+              <input value={newId} onChange={(e) => setNewId(e.target.value)} placeholder="技能 id（小写英文，如 resume）" />
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="技能名（如：简历制作）" />
+              <button className="btn primary sm" onClick={doCreate}>创建</button>
+            </div>
+          )}
           {err && <div style={{ fontSize: 12, color: "var(--warn)", padding: 8 }}>后端未启动，技能读不到</div>}
           {list.map((s) => (
             <div key={s.id}
@@ -97,7 +131,13 @@ export default function Skills() {
             <div className="cp-h">
               <b>{sel?.name ?? ""}.md</b>
               {dirty ? <span className="badge run">未保存</span> : <span className="badge done">已保存 ✓</span>}
-              <button className="btn primary sm" style={{ marginLeft: "auto" }} onClick={save} disabled={saving || !dirty || !sel}>
+              {sel && (
+                <button className="btn soft sm danger" style={{ marginLeft: "auto", marginRight: 8 }}
+                  onClick={() => doDelete(sel)} disabled={saving}>
+                  <IconTrash size={13} />
+                </button>
+              )}
+              <button className="btn primary sm" onClick={save} disabled={saving || !dirty || !sel}>
                 {saving ? "保存中…" : "保存"}
               </button>
             </div>

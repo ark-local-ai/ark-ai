@@ -43,6 +43,9 @@ function labelFor(method: string, url: string): string {
   // 技能/专家/自动化
   if (u.startsWith("/api/skills") && (m === "PUT" || m === "POST")) return "编辑技能";
   if (u.startsWith("/api/skills") && m === "DELETE") return "删除技能";
+  if (u.startsWith("/api/experts") && m === "POST") return "创建专家";
+  if (u.startsWith("/api/experts") && m === "PUT") return "编辑专家";
+  if (u.startsWith("/api/experts") && m === "DELETE") return "删除专家";
   if (u.startsWith("/api/jobs") && m === "POST" && u.includes("/run")) return "手动执行任务";
   if (u.startsWith("/api/jobs") && m === "POST") return "新建定时任务";
   if (u.startsWith("/api/jobs") && m === "PUT") return "编辑定时任务";

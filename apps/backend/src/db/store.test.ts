@@ -19,6 +19,7 @@ const resetTables = () => {
     DELETE FROM sessions;
     DELETE FROM task_templates;
     DELETE FROM file_versions;
+    DELETE FROM experts;
   `);
 };
 
@@ -352,5 +353,37 @@ describe("交付版本历史（C5 store）", () => {
     store.addFileVersion("C.xlsx", "t2", "c2");
     store.deleteFileVersions("C.xlsx");
     expect(store.listFileVersions("C.xlsx")).toHaveLength(0);
+  });
+});
+
+describe("用户自建专家（C6 store）", () => {
+  it("createExpert 落库并回读、listCustomExperts 多用户隔离", () => {
+    const aId = store.createExpert({ name: "投研专家", desc: "行业研究", skills: "2", connectors: "1" }, "u1");
+    store.createExpert({ name: "另一用户的", desc: "私有", skills: "1" }, "u2");
+    // u1 只见自己 + 全局，不见 u2 的
+    const forU1 = store.listCustomExperts("u1");
+    expect(forU1.some((e) => e.id === aId)).toBe(true);
+    expect(forU1.some((e) => e.name === "另一用户的")).toBe(false);
+    // 未登录（null）只见全局 user_id IS NULL，与任务/模板隔离语义一致
+    const all = store.listCustomExperts(undefined);
+    expect(all.length).toBe(0);
+  });
+
+  it("updateExpert 局部更新与全量聚合", () => {
+    const id = store.createExpert({ name: "旧名", icon: "专", color: "#8B5E34", desc: "d", skills: "1", connectors: "0" });
+    expect(store.updateExpert(id, { desc: "新简介", skills: "3" })).toBe(true);
+    const list = store.listCustomExperts(undefined);
+    const c = list.find((e) => e.id === id)!;
+    expect(c.desc).toBe("新简介");
+    expect(c.skills).toBe("3");
+    expect(c.name).toBe("旧名"); // 未传字段保持不变
+    expect(store.updateExpert("nope", { name: "x" })).toBe(false);
+  });
+
+  it("deleteExpert 删除存在返回 true，再次删除 false", () => {
+    const id = store.createExpert({ name: "待删" });
+    expect(store.deleteExpert(id)).toBe(true);
+    expect(store.deleteExpert(id)).toBe(false);
+    expect(store.listCustomExperts(undefined).some((e) => e.id === id)).toBe(false);
   });
 });

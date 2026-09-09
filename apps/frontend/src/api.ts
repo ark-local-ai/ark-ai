@@ -329,6 +329,61 @@ export async function listExperts(): Promise<ExpertDto[]> {
   return res.json();
 }
 
+export interface ExpertInput {
+  name: string;
+  icon?: string;
+  color?: string;
+  desc?: string;
+  skills?: string;
+  connectors?: string;
+}
+
+export async function createExpert(input: ExpertInput): Promise<{ id: string }> {
+  const res = await fetch(`${BASE}/api/experts`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`创建专家失败: ${res.status}`);
+  return res.json();
+}
+
+export async function updateExpert(id: string, input: ExpertInput): Promise<void> {
+  const res = await fetch(`${BASE}/api/experts/${id}`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`编辑专家失败: ${res.status}`);
+}
+
+export async function deleteExpert(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/experts/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`删除专家失败: ${res.status}`);
+}
+
+/** 新建技能：新建时需给出 code，其余字段可缺省 */
+export async function createSkill(id: string, body: Partial<SkillDto>): Promise<SkillDto> {
+  const res = await fetch(`${BASE}/api/skills/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`创建技能失败: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteSkill(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/skills/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`删除技能失败: ${res.status}`);
+}
+
 export interface JobDto {
   id: string;
   name: string;
