@@ -20,6 +20,7 @@ import { scanWorkspace } from "./tools/workspace.js";
 import { searchWorkspaceFiles } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
 import { pruneSessions } from "./db/store.js";
+import { resumeUnfinishedTasks } from "./agent/runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workDir = join(__dirname, "..", "..", "frontend", "public", "workspace");
@@ -81,4 +82,5 @@ export async function buildApp() {
 const port = Number(process.env.PORT ?? 4000);
 pruneSessions(); // 启动时清理过期会话
 startScheduler(); // 启动本地定时任务调度器
+resumeUnfinishedTasks(); // M24：把上次进程遗留的 queue/running 任务重新入队续跑
 await buildApp().then((app) => app.listen({ port, host: "127.0.0.1" }));

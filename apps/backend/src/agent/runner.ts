@@ -7,7 +7,7 @@
 // （若将来要硬超时，需给整条管线传 AbortSignal 做真实取消，属较大改造。）
 
 import { runTask } from "./orchestrator";
-import { updateTaskStatus } from "../db/store";
+import { updateTaskStatus, getUnfinishedTasks } from "../db/store";
 import { publish } from "./events";
 
 // 串行队列：tail 是上一条任务的 Promise，新任务接在其后，保证同一时刻只跑一个任务。
@@ -39,4 +39,20 @@ async function execute(id: string, prompt: string, userId?: string): Promise<voi
  */
 export function enqueueTask(id: string, prompt: string, userId?: string): void {
   tail = tail.then(() => execute(id, prompt, userId));
+}
+
+/**
+ * M24 进程重启恢复：启动时把上次进程遗留的 queue/running 任务重新入队续跑。
+ * 编排开头 resetTask(id) 会幂等复位旧行再重跑，故可直接重入队并立即返回。
+ * 需在 server 启动时调用，且需能读到 userId 以保持多用户归属。
+ */
+export function resumeUnfinishedTasks(): void {
+  const pending = getUnfinishedTasks();
+  for (const t of pending) {
+    enqueueTask(t.id, t.prompt, t.userId);
+  }
+  if (pending.length > 0) {
+    // 用队列链头打印一次，避免刷屏
+    tail = tail.then(() => console.log(`[resume] 恢复 ${pending.length} 个遗留任务`));
+  }
 }

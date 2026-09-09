@@ -127,6 +127,16 @@ export function deleteTask(id: string): boolean {
   return existed;
 }
 
+/**
+ * 进程重启后仍「未完成」的任务（queue/running 且未归档）——供 M24 启动恢复重入队。
+ * 编排在 runTask 开头会 resetTask(id) 幂等复位，因此重跑一次即干净地续跑/重做。
+ */
+export function getUnfinishedTasks(): { id: string; prompt: string; userId?: string; status: TaskStatus }[] {
+  return db.prepare(
+    `SELECT id, prompt, user_id, status FROM tasks WHERE status IN ('queue','running') AND archived = 0 ORDER BY created`,
+  ).all() as unknown as { id: string; prompt: string; userId?: string; status: TaskStatus }[];
+}
+
 /** 归档/取消归档任务（M22）；返回该任务原本是否存在 */
 export function setTaskArchived(id: string, archived: boolean): boolean {
   const existed = !!db.prepare(`SELECT 1 FROM tasks WHERE id = ?`).get(id);
