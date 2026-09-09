@@ -51,6 +51,7 @@ function labelFor(method: string, url: string): string {
   if (u.startsWith("/api/memories") && m === "DELETE") return "删除记忆";
   if (u.startsWith("/api/tools/web.read") && m === "POST") return "网页读取工具调用";
   if (u.startsWith("/api/tools/search.knowledge") && m === "POST") return "知识检索工具调用";
+  if (u.startsWith("/api/tools/web.search") && m === "POST") return "联网搜索工具调用";
   if (u === "/api/im" && m === "POST") return "IM 入站消息";
   if (u.startsWith("/api/im") && m === "PUT") return "修改 IM 桥配置";
   if (u.startsWith("/api/jobs") && m === "POST" && u.includes("/run")) return "手动执行任务";

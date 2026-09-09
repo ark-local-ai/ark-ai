@@ -4,6 +4,7 @@
 import type { FastifyInstance } from "fastify";
 import { webRead } from "../tools/web";
 import { searchKnowledge } from "../tools/knowledge";
+import { searchWeb } from "../tools/websearch";
 import { currentUser } from "./auth";
 
 export interface ToolInfo {
@@ -29,6 +30,12 @@ export async function toolRoutes(app: FastifyInstance) {
         ready: true,
         kind: "search",
       },
+      {
+        name: "web.search",
+        describe: "联网搜索（默认免 key 的 DuckDuckGo；可配 ARK_WEBSEARCH_ENDPOINT+KEY），返回标题/链接/摘要，供调研类提示词自动联网",
+        ready: true,
+        kind: "search",
+      },
     ];
   });
 
@@ -46,6 +53,15 @@ export async function toolRoutes(app: FastifyInstance) {
     const query = (req.body?.query ?? "").trim();
     if (!query) return reply.code(400).send({ error: "query 必填" });
     const result = await searchKnowledge(query, currentUser(req)?.id, req.body?.limit ?? 8);
+    return reply.send(result);
+  });
+
+  // 真工具调用入口：POST /api/tools/web.search { query }
+  app.post<{ Body: { query?: string } }>("/web.search", async (req, reply) => {
+    const query = (req.body?.query ?? "").trim();
+    if (!query) return reply.code(400).send({ error: "query 必填" });
+    const result = await searchWeb(query);
+    if (result.error) return reply.code(502).send(result);
     return reply.send(result);
   });
 }
