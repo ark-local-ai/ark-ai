@@ -26,7 +26,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const workDir = join(__dirname, "..", "..", "frontend", "public", "workspace");
 
 export async function buildApp() {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: process.env.ARK_TEST ? false : true });
 
   app.register(cors, { origin: true });
 
@@ -79,8 +79,12 @@ export async function buildApp() {
 }
 
 // 直接运行时监听启动（tsx src/server.ts）
+// 直接运行时监听启动（tsx src/server.ts）。测试导入 buildApp 时用 ARK_TEST=1 跳过监听。
+// 直接运行时监听启动（tsx src/server.ts）。测试导入 buildApp 时用 ARK_TEST=1 跳过副作用（监听/调度/恢复）。
 const port = Number(process.env.PORT ?? 4000);
-pruneSessions(); // 启动时清理过期会话
-startScheduler(); // 启动本地定时任务调度器
-resumeUnfinishedTasks(); // M24：把上次进程遗留的 queue/running 任务重新入队续跑
-await buildApp().then((app) => app.listen({ port, host: "127.0.0.1" }));
+if (!process.env.ARK_TEST) {
+  pruneSessions(); // 启动时清理过期会话
+  startScheduler(); // 启动本地定时任务调度器
+  resumeUnfinishedTasks(); // M24：把上次进程遗留的 queue/running 任务重新入队续跑
+  await buildApp().then((app) => app.listen({ port, host: "127.0.0.1" }));
+}

@@ -14,5 +14,6 @@
     "rootDir": "src",
     "noEmitOnError": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/test"]
 }

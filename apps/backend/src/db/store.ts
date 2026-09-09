@@ -7,7 +7,8 @@ import type { Artifact, Task, TaskStep, StepStatus, TaskStatus } from "../types"
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = join(__dirname, "..", "..", "data");
 mkdirSync(dataDir, { recursive: true });
-const dbPath = join(dataDir, "ark.db");
+// 默认库文件 data/ark.db；测试可用 ARK_DB_PATH 指向临时库，避免污染真实数据（M25）
+const dbPath = process.env.ARK_DB_PATH || join(dataDir, "ark.db");
 
 // Node 22 内置 SQLite：零原生编译依赖，本地优先首选
 export const db = new DatabaseSync(dbPath);
@@ -69,12 +70,13 @@ if (!taskCols.some((c) => c.name === "archived")) {
 // ---- 任务写 / 读（node:sqlite 同步 API，prepare().run() / .get() / .all()）----
 export function insertTask(task: Task, userId?: string): void {
   db.prepare(
-    `INSERT INTO tasks (id, title, prompt, status, model, expert, skills, workspace, checks, timeline, created, user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tasks (id, title, prompt, status, model, expert, skills, workspace, checks, timeline, created, archived, user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id, task.title, task.prompt, task.status, task.model, task.expert,
     JSON.stringify(task.skills), task.workspace,
-    JSON.stringify(task.checks), JSON.stringify(task.timeline), task.created, userId ?? null,
+    JSON.stringify(task.checks), JSON.stringify(task.timeline), task.created,
+    task.archived ? 1 : 0, userId ?? null,
   );
 }
 
@@ -132,9 +134,10 @@ export function deleteTask(id: string): boolean {
  * 编排在 runTask 开头会 resetTask(id) 幂等复位，因此重跑一次即干净地续跑/重做。
  */
 export function getUnfinishedTasks(): { id: string; prompt: string; userId?: string; status: TaskStatus }[] {
-  return db.prepare(
-    `SELECT id, prompt, user_id, status FROM tasks WHERE status IN ('queue','running') AND archived = 0 ORDER BY created`,
-  ).all() as unknown as { id: string; prompt: string; userId?: string; status: TaskStatus }[];
+  const rows = db.prepare(
+    `SELECT id, prompt, user_id AS userId, status FROM tasks WHERE status IN ('queue','running') AND archived = 0 ORDER BY created`,
+  ).all() as { id: string; prompt: string; userId?: string; status: TaskStatus }[];
+  return rows;
 }
 
 /** 归档/取消归档任务（M22）；返回该任务原本是否存在 */
