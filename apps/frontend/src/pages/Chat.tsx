@@ -2,15 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { IconSend, IconTrash, IconNote } from "../components/icons";
 import {
-  sendChat, listChatSessions, getChatMessages, deleteChatSession,
+  sendChat, listChatSessions, getChatMessages, deleteChatSession, subscribeTask, workspaceUrl,
   type ChatMsg, type ChatSessionDto,
 } from "../api";
 
-interface Msg { role: "user" | "ai"; text: string }
+interface Msg {
+  role: "user" | "ai";
+  text: string;
+  task?: { taskId: string; status: string; steps: { title: string; status: string }[]; deliverable: string | null };
+}
 
 const WELCOME: Msg[] = [
-  { role: "ai", text: "你好，我是方舟助理。我可以帮你做调研、写文档、做 PPT、分析数据等。告诉我你想做什么？" },
+  { role: "ai", text: "你好，我是方舟助理。我可以帮你做调研、写文档、做 PPT、分析数据等。点「执行」把这句话变成真实任务，完成后这里给出文件下载。" },
 ];
+
+const taskStatusLabel = (s: string) =>
+  ({ running: "执行中", done: "已完成", failed: "失败", queue: "排队" }[s] ?? s);
 
 export default function Chat() {
   const nav = useNavigate();
@@ -22,6 +29,7 @@ export default function Chat() {
   const [sessions, setSessions] = useState<ChatSessionDto[]>([]);
   const [v, setV] = useState("");
   const [busy, setBusy] = useState(false);
+  const [runMode, setRunMode] = useState(false);
   const historyRef = useRef<ChatMsg[]>([]);
 
   const loadSessions = () => {
@@ -69,6 +77,18 @@ export default function Chat() {
 
     const aiIndex = msgs.length + 1;
     let acc = "";
+    let subOff: (() => void) | null = null;
+
+    const setTask = (fn: (t: NonNullable<Msg["task"]>) => NonNullable<Msg["task"]>) => {
+      setMsgs((m) => {
+        if (aiIndex >= m.length) return m;
+        const next = [...m];
+        const cur = next[aiIndex];
+        const base: NonNullable<Msg["task"]> = cur.task ?? { taskId: "", status: "running", steps: [], deliverable: null };
+        next[aiIndex] = { ...cur, task: fn(base) };
+        return next;
+      });
+    };
 
     sendChat(
       text,
@@ -76,19 +96,44 @@ export default function Chat() {
       (t) => {
         acc += t;
         setMsgs((m) => {
+          if (aiIndex >= m.length) return m;
           const next = [...m];
-          next[aiIndex] = { role: "ai", text: next[aiIndex].text + t };
+          next[aiIndex] = { ...next[aiIndex], text: next[aiIndex].text + t };
           return next;
         });
       },
-      ({ text, sessionId: sid }) => {
-        historyRef.current.push({ role: "assistant", content: text || acc });
+      ({ text: full, sessionId: sid, taskId }) => {
+        historyRef.current.push({ role: "assistant", content: full || acc });
         if (sid) setSessionId(sid);      // 新会话后端创建，记住 id
+        if (subOff) { subOff(); subOff = null; }
         setBusy(false);
         loadSessions();
+        void taskId;
       },
-      () => setBusy(false),
+      () => { if (subOff) { subOff(); subOff = null; } setBusy(false); },
       sessionId ?? undefined,
+      {
+        runTask: runMode,
+        onTaskCreated: (taskId, sid) => {
+          if (sid) setSessionId(sid);
+          setTask((t) => ({ ...t, taskId }));
+          subOff = subscribeTask(taskId, (ev) => {
+            if (ev.type === "plan" && Array.isArray(ev.data)) {
+              const steps = (ev.data as { title: string; status: string }[]).map((s) => ({ title: s.title, status: s.status ?? "pending" }));
+              setTask((t) => ({ ...t, steps }));
+            } else if (ev.type === "deliver") {
+              const d = ev.data as { name: string };
+              setTask((t) => ({ ...t, status: "done", deliverable: d.name }));
+            } else if (ev.type === "done") {
+              setTask((t) => ({ ...t, status: "done" }));
+              if (subOff) { subOff(); subOff = null; }
+            } else if (ev.type === "error") {
+              setTask((t) => ({ ...t, status: "failed" }));
+              if (subOff) { subOff(); subOff = null; }
+            }
+          });
+        },
+      },
     );
   };
 
@@ -125,6 +170,25 @@ export default function Chat() {
                 <div className="msg-bub">
                   {m.text}
                   {busy && i === msgs.length - 1 && m.role === "ai" && <span className="caret" />}
+                  {m.task && (
+                    <div className="chat-task">
+                      <div className="chat-task-h">
+                        <b>任务 {m.task.taskId}</b>
+                        <span className={`pill task-st ${m.task.status}`}>{taskStatusLabel(m.task.status)}</span>
+                      </div>
+                      {(m.task.steps ?? []).map((s, si) => (
+                        <div key={si} className={`task-step ${s.status}`}>
+                          <span className="ts-dot" />{s.title}
+                        </div>
+                      ))}
+                      {m.task.deliverable && (
+                        <a className="btn primary sm chat-dl"
+                          href={workspaceUrl(m.task.deliverable)}
+                          target="_blank" rel="noreferrer">下载 {m.task.deliverable}</a>
+                      )}
+                      {m.task.status === "failed" && <div className="chat-task-err">任务执行失败</div>}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -135,7 +199,10 @@ export default function Chat() {
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
             <div className="row">
               <span className="pill">＋</span>
-              <span className="pill blue">DeepSeek ▾</span>
+              <button className={`pill${runMode ? " blue" : ""}`} onClick={() => setRunMode((x) => !x)}
+                title="执行模式：把这句话作为真实 Agent 任务执行">
+                {runMode ? "执行 ON" : "执行 OFF"}
+              </button>
               <button className="send" onClick={send} disabled={busy}><IconSend /></button>
             </div>
           </div>

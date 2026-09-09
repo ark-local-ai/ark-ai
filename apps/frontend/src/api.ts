@@ -182,9 +182,10 @@ export function sendChat(
   message: string,
   history: ChatMsg[],
   onToken: (t: string) => void,
-  onDone?: (result: { text: string; sessionId?: string }) => void,
+  onDone?: (result: { text: string; sessionId?: string; taskId?: string }) => void,
   onError?: (err: unknown) => void,
   sessionId?: string,
+  opts?: { runTask?: boolean; onTaskCreated?: (taskId: string, sessionId?: string) => void },
 ): () => void {
   const ctrl = new AbortController();
   let closed = false;
@@ -192,12 +193,13 @@ export function sendChat(
   (async () => {
     let full = "";
     let returnSessionId: string | undefined = sessionId;
+    let taskIdRef: string | undefined;
     try {
       const res = await fetch(`${BASE}/api/chat`, {
         method: "POST",
         signal: ctrl.signal,
         headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
-        body: JSON.stringify({ message, history, sessionId }),
+        body: JSON.stringify({ message, history, sessionId, runTask: opts?.runTask }),
       });
       if (!res.ok || !res.body) throw new Error(`chat ${res.status}`);
       const reader = res.body.getReader();
@@ -217,8 +219,12 @@ export function sendChat(
             else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
           }
           if (!dataStr) continue;
-          const data = JSON.parse(dataStr) as { text?: string; sessionId?: string };
-          if (eventType === "token" && data.text) {
+          const data = JSON.parse(dataStr) as { text?: string; sessionId?: string; taskId?: string };
+          if (eventType === "task_created" && data.taskId) {
+            if (data.sessionId) returnSessionId = data.sessionId;
+            taskIdRef = data.taskId;
+            opts?.onTaskCreated?.(data.taskId, data.sessionId);
+          } else if (eventType === "token" && data.text) {
             full += data.text;
             onToken(data.text);
           } else if (eventType === "done") {
@@ -226,7 +232,7 @@ export function sendChat(
           }
         }
       }
-      if (!closed) onDone?.({ text: full, sessionId: returnSessionId });
+      if (!closed) onDone?.({ text: full, sessionId: returnSessionId, taskId: taskIdRef });
     } catch (err) {
       if (!closed && onError) onError(err);
     }
