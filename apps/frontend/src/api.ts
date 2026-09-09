@@ -817,3 +817,25 @@ export async function deleteMemory(id: string): Promise<void> {
   const res = await fetch(`${BASE}/api/memories/${id}`, { method: "DELETE", headers: authHeaders() });
   if (!res.ok) throw new Error(`删除记忆失败: ${res.status}`);
 }
+
+// ---- M45 IM 消息桥 ----
+export interface ImSettingsDto {
+  enabled: boolean;
+  secret: string;
+  name: string;
+  endpoint: string;
+}
+export async function getImSettings(): Promise<ImSettingsDto> {
+  const res = await fetch(`${BASE}/api/im`);
+  if (!res.ok) throw new Error(`读取 IM 桥配置失败: ${res.status}`);
+  return res.json();
+}
+export async function updateImSettings(body: { enabled?: boolean; name?: string; rotateSecret?: boolean }): Promise<ImSettingsDto> {
+  const res = await fetch(`${BASE}/api/im`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`更新 IM 桥配置失败: ${res.status}`);
+  return res.json();
+}

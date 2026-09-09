@@ -19,6 +19,9 @@ export function installAuthGate(app: FastifyInstance): void {
     const url = req.url ?? "";
     if (!url.startsWith("/api")) return; // 非 API 由各自中间件管
     if (url.startsWith("/api/auth")) return; // 认证端点自管
+    // M45：IM 桥的**入站** POST 是给外部 IM 服务的 webhook，无登录态，用 secret 充当鉴权
+    //（见 im.ts）；配置的 PUT（改开关）仍需登录。
+    if (req.method === "POST" && url === "/api/im") return;
     if (!currentUser(req)) {
       return reply.code(401).send({ error: "未登录，请先登录" });
     }

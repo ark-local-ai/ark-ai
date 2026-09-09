@@ -355,6 +355,11 @@ db.exec(`
     created TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
     kind TEXT NOT NULL DEFAULT 'note',
@@ -1024,4 +1029,51 @@ export function searchMemoriesFor(message: string, userId?: string): MemoryRow[]
      WHERE (user_id = ? OR user_id IS NULL) AND (${like})
      ORDER BY created DESC LIMIT 10`,
   ).all(...params) as unknown as MemoryRow[];
+}
+
+// ---- 通用 key-value 设置（M45 IM 桥等用） ----
+export function getSetting(key: string): string | null {
+  const r = db.prepare(`SELECT value FROM settings WHERE key = ?`).get(key) as { value: string } | undefined;
+  return r ? r.value : null;
+}
+export function setSetting(key: string, value: string): void {
+  db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?)
+              ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, value);
+}
+
+// ---- M45 IM 消息桥配置（默认关闭，数据不出机器） ----
+export interface ImSettings {
+  enabled: boolean;
+  secret: string;
+  name: string;
+  /** 本机 webhook 端点（仅提示用） */
+  endpoint: string;
+}
+
+function randomSecret(): string {
+  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 8);
+}
+
+/** 读取 IM 桥配置；从不存在则初始化默认（关闭 + 随机 secret） */
+export function getImSettings(): ImSettings {
+  const enabled = getSetting("im_enabled") === "1";
+  let secret = getSetting("im_secret");
+  if (!secret) {
+    secret = randomSecret();
+    setSetting("im_secret", secret);
+  }
+  const name = getSetting("im_name") || "IM 消息";
+  return { enabled, secret, name, endpoint: `/api/im` };
+}
+
+export function setImEnabled(enabled: boolean): void {
+  setSetting("im_enabled", enabled ? "1" : "0");
+}
+export function setImName(name: string): void {
+  setSetting("im_name", name.trim() || "IM 消息");
+}
+export function rotateImSecret(): string {
+  const s = randomSecret();
+  setSetting("im_secret", s);
+  return s;
 }

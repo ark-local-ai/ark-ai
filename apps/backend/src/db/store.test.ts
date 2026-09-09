@@ -22,6 +22,7 @@ const resetTables = () => {
     DELETE FROM experts;
     DELETE FROM memories;
     DELETE FROM memories_fts;
+    DELETE FROM settings;
   `);
 };
 
@@ -453,5 +454,29 @@ describe("记忆对话注入（M42 store searchMemoriesFor）", () => {
     store.createMemory({ kind: "note", content: "会议定在上午" }, "u1");
     expect(store.searchMemoriesFor("！！！？？", "u1")).toHaveLength(0);
     expect(store.searchMemoriesFor("", "u1")).toHaveLength(0);
+  });
+});
+
+describe("IM 消息桥配置（M45 store）", () => {
+  it("默认关闭并自动生成 secret", () => {
+    const s = store.getImSettings();
+    expect(s.enabled).toBe(false);
+    expect(s.secret.length).toBeGreaterThan(5);
+    expect(s.endpoint).toBe("/api/im");
+  });
+
+  it("开关/改名可持久化", () => {
+    store.setImEnabled(true);
+    store.setImName("企业微信");
+    const s = store.getImSettings();
+    expect(s.enabled).toBe(true);
+    expect(s.name).toBe("企业微信");
+  });
+
+  it("rotateImSecret 生成新值且与旧值不同", () => {
+    const a = store.getImSettings().secret;
+    const b = store.rotateImSecret();
+    expect(b).not.toBe(a);
+    expect(store.getImSettings().secret).toBe(b);
   });
 });

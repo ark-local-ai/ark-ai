@@ -28,6 +28,7 @@ const NAV = [
   { to: "/app/workspace", label: "资料库", icon: <IconLibrary size={15} />, sub: null },
   { to: "/app/stats", label: "统计", icon: <IconChart size={15} />, sub: null },
   { to: "/app/memories", label: "记忆", icon: <IconSpark size={15} />, sub: null },
+  { to: "/app/im", label: "IM 消息桥", icon: <IconLink size={15} />, sub: null },
 ];
 
 export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
