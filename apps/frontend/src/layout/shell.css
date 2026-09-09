@@ -173,6 +173,14 @@
 .sb-grp .lb { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .sb-grp .cnt { font-size: 10.5px; flex: none; }
 .sb-empty { font-size: 11.5px; color: var(--text-3); padding: 8px 8px 8px 24px; }
+.sb-archive-toggle {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  margin-bottom: 2px; padding: 5px 12px; border-radius: var(--radius-sm);
+  background: none; border: none; cursor: pointer; text-align: left;
+  font-size: 11.5px; color: var(--text-3); transition: background 0.16s var(--ease-out), color 0.16s var(--ease-out);
+}
+.sb-archive-toggle:hover { background: var(--surface-2); color: var(--text-2); }
+.sb-archive-toggle .arch-badge { margin-left: auto; font-size: 12px; color: var(--text-3); opacity: 0.8; }
 .sb-row {
   display: flex; align-items: center; gap: 8px; width: 100%;
   padding: 6px 8px 6px 21px; border-radius: var(--radius-sm);

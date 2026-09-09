@@ -4,10 +4,10 @@ import {
   IconAssistant, IconChevD, IconChevD2, IconChevU2, IconClock, IconDoc,
   IconFolder, IconFolderOpen, IconGear, IconLibrary, IconLink, IconNote, IconSearch,
   IconShare, IconRename, IconDots, IconSpark, IconTrash, IconUsers, IconChart,
-  ArkLogo, IconCollapse,
+  ArkLogo, IconCollapse, IconArchive,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
-import { listTasks, deleteTask, retryTask, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, subscribeGlobal, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult } from "../api";
+import { listTasks, deleteTask, retryTask, setTaskArchived, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, subscribeGlobal, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult } from "../api";
 import AuthModal from "../components/AuthModal";
 
 type Mode = "task" | "space";
@@ -37,21 +37,22 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const [fileHits, setFileHits] = useState<WorkspaceSearchResult[]>([]);
   const [fold, setFold] = useState<Record<string, boolean>>({});
   const [delTarget, setDelTarget] = useState<null | { kind: "task" | "space"; id: string }>(null);
-  const [ctxMenu, setCtxMenu] = useState<null | { kind: "task" | "space"; id: string; x: number; y: number; title: string }>(null);
+  const [ctxMenu, setCtxMenu] = useState<null | { kind: "task" | "space"; id: string; x: number; y: number; title: string; archived?: boolean }>(null);
 
   const [tasks, setTasks] = useState(mockRecentTasks);
+  const [showArchived, setShowArchived] = useState(false);
   const refreshTasks = () => {
-    listTasks()
-      .then((ts) => setTasks(ts.map((t) => ({ id: t.id, title: t.title, time: t.created, space: null as string | null, status: t.status }))))
+    listTasks(showArchived)
+      .then((ts) => setTasks(ts.map((t) => ({ id: t.id, title: t.title, time: t.created, space: null as string | null, status: t.status, archived: t.archived }))))
       .catch(() => {});
   };
-  useEffect(refreshTasks, []);
+  useEffect(refreshTasks, [showArchived]);
   // M21：订阅全局任务事件，任务完成/失败时自动刷新列表（修复“创建/跑完任务后列表不更新”的 stale 问题）
   useEffect(() => {
     return subscribeGlobal((ev) => {
       if (ev.type === "done" || ev.type === "error") refreshTasks();
     });
-  }, []);
+  }, [showArchived]);
   // 真实空间列表（来自后端 /api/spaces），排除默认空间（放进「任务」抽屉）
   const [spaceList, setSpaceList] = useState<SpaceDto[]>([]);
   useEffect(() => {
@@ -142,9 +143,19 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
 
   const openCtx = (kind: "task" | "space", id: string, title: string, e: React.MouseEvent) => {
     const btn = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setCtxMenu({ kind, id, title, x: btn.right - 4, y: btn.bottom + 4 });
+    const t = tasks.find((x) => x.id === id);
+    setCtxMenu({ kind, id, title, archived: t?.archived, x: btn.right - 4, y: btn.bottom + 4 });
   };
   const closeCtx = () => setCtxMenu(null);
+
+  // 归档 / 取消归档任务（M22）：调后端后刷新列表与上下文菜单
+  const doArchiveTask = async (id: string, archived: boolean) => {
+    setCtxMenu(null);
+    try {
+      await setTaskArchived(id, archived);
+      refreshTasks();
+    } catch { /* 忽略 */ }
+  };
 
   return (
     <aside className={`sb${collapsed ? " collapsed" : ""}`}>
@@ -223,13 +234,20 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
           <div className="sb-panel">
             {mode === "task" ? (
               /* 对话：全量视图，所有对话（不论空间）直接平铺 */
-              <div className="sb-grpwrap">
-                {tasks.map((t) => (
-                  <Row key={t.id} title={t.title} time={t.time} onClick={openTask}
-                    onMenu={(e) => openCtx("task", t.id, t.title, e)} />
-                ))}
-                {tasks.length === 0 && <div className="sb-empty">暂无对话</div>}
-              </div>
+              <>
+                <button className="sb-archive-toggle" onClick={() => setShowArchived((v) => !v)}>
+                  <IconArchive size={13} />
+                  <span>{showArchived ? "归档任务" : "查看归档"}</span>
+                  <span className="arch-badge">{showArchived ? "×" : ""}</span>
+                </button>
+                <div className="sb-grpwrap">
+                  {tasks.map((t) => (
+                    <Row key={t.id} title={t.title} time={t.time} onClick={openTask}
+                      onMenu={(e) => openCtx("task", t.id, t.title, e)} />
+                  ))}
+                  {tasks.length === 0 && <div className="sb-empty">{showArchived ? "暂无归档任务" : "暂无对话"}</div>}
+                </div>
+              </>
             ) : (
               /* 空间：按空间分类，未命名/默认对话放进「任务」抽屉 */
               <>
@@ -388,6 +406,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                           <IconClock size={14} /> 重试
                         </button>
                       )}
+                      <button className="sb-ctx-item" onClick={() => doArchiveTask(ctxMenu.id, !ctxMenu.archived)}>
+                        <IconArchive size={14} /> {ctxMenu.archived ? "取消归档" : "归档"}
+                      </button>
                       <button
                         className="sb-ctx-item danger"
                         onClick={() => { setCtxMenu(null); setDelTarget({ kind: "task", id: ctxMenu.id }); }}

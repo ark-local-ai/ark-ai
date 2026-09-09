@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { enqueueTask } from "../agent/runner.js";
-import { getTask, listTasks, deleteTask } from "../db/store.js";
+import { getTask, listTasks, deleteTask, setTaskArchived } from "../db/store.js";
 import { subscribe } from "../agent/events.js";
 import { currentUser } from "./auth.js";
 
@@ -20,7 +20,24 @@ export async function taskRoutes(app: FastifyInstance) {
   });
 
   // 任务列表摘要（侧栏「最近任务」）；多用户隔离：登录用户只见自己的+全局
-  app.get("/", async (req) => listTasks(50, currentUser(req)?.id));
+  // ?archived=1 只列归档任务（默认只看活跃）
+  app.get("/", async (req) => {
+    const q = (req.query as { archived?: string })?.archived === "1";
+    return listTasks(50, currentUser(req)?.id, q);
+  });
+
+  // 归档 / 取消归档任务（仅终态任务可归档，M22）
+  app.post<{ Params: { id: string }; Body: { archived?: boolean } }>("/:id/archive", async (req, reply) => {
+    const id = req.params.id;
+    const task = getTask(id);
+    if (!task) return reply.code(404).send({ error: "任务不存在" });
+    const archived = req.body?.archived ?? true;
+    if (archived && (task.status === "queue" || task.status === "running")) {
+      return reply.code(409).send({ error: "任务正在执行中，不能归档" });
+    }
+    if (!setTaskArchived(id, archived)) return reply.code(404).send({ error: "任务不存在" });
+    return reply.send({ ok: true, archived });
+  });
 
   // 查询任务当前快照
   app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {

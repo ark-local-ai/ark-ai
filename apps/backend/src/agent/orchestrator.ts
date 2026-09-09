@@ -53,6 +53,7 @@ export async function runTask(id: string, prompt: string, userId?: string): Prom
     ],
     timeline: [{ time: "00:00", label: "创建任务" }],
     created,
+    archived: false,
   };
 
   // 幂等复位：重试同一 id 时先清掉上次残留的 steps/artifacts/主行，再写新快照

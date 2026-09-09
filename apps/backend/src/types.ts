@@ -33,6 +33,7 @@ export interface Task {
   checks: { label: string; ok: boolean }[];
   timeline: { time: string; label: string }[];
   created: string;
+  archived: boolean;
 }
 
 export interface SseEvent {

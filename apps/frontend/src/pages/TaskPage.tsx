@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { IconCheck } from "../components/icons";
 import { ftColor, ftLabel } from "../data/mock";
-import { getTask, subscribeTask, retryTask, deleteTask, workspaceUrl, type TaskDto } from "../api";
+import { getTask, subscribeTask, retryTask, deleteTask, setTaskArchived, workspaceUrl, type TaskDto } from "../api";
 
 export default function TaskPage() {
   const [params] = useSearchParams();
@@ -102,6 +102,14 @@ export default function TaskPage() {
     } catch { /* 忽略 */ }
   };
 
+  const doArchive = async (archived: boolean) => {
+    if (!taskId) return;
+    try {
+      await setTaskArchived(taskId, archived);
+      setTask({ ...task, archived });
+    } catch { /* 忽略 */ }
+  };
+
 
   return (
     <div className="page">
@@ -112,7 +120,12 @@ export default function TaskPage() {
               <b>{task.title}</b>{badge}
               <span className="t-actions">
                 {(task.status === "failed" || task.status === "done") && (
-                  <button className="btn ghost sm" disabled={busy} onClick={doRetry}>重试</button>
+                  <>
+                    <button className="btn ghost sm" disabled={busy} onClick={doRetry}>重试</button>
+                    <button className="btn ghost sm" onClick={() => doArchive(!task.archived)}>
+                      {task.archived ? "取消归档" : "归档"}
+                    </button>
+                  </>
                 )}
                 <button className="btn ghost sm danger" onClick={doDelete}>删除</button>
               </span>

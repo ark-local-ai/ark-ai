@@ -65,6 +65,13 @@ export const IconClock = (p: P) => (
     <path d="M12 3.6v1.2M20.4 12h-1.2M12 20.4v-1.2M3.6 12h1.2" />
   </svg>
 );
+export const IconArchive = (p: P) => (
+  <svg {...base(p.size, p.className)}>
+    <path d="M4 5h16v3.2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+    <path d="M5.5 9.2v8A1.8 1.8 0 0 0 7.3 19h9.4a1.8 1.8 0 0 0 1.8-1.8V9.2" />
+    <path d="M10.4 13h3.2" />
+  </svg>
+);
 export const IconFolder = (p: P) => (
   <svg {...base(p.size, p.className)}>
     <path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4.1l1.9 2.1H19A1.5 1.5 0 0 1 20.5 9v8A1.5 1.5 0 0 1 19 18.5H5A1.5 1.5 0 0 1 3.5 17z" />

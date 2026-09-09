@@ -61,6 +61,11 @@ if (!taskCols.some((c) => c.name === "user_id")) {
   db.exec(`ALTER TABLE tasks ADD COLUMN user_id TEXT`);
 }
 
+// ---- 迁移：任务归档标记（tasks.archived），0=活跃 1=已归档 ----
+if (!taskCols.some((c) => c.name === "archived")) {
+  db.exec(`ALTER TABLE tasks ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
+}
+
 // ---- 任务写 / 读（node:sqlite 同步 API，prepare().run() / .get() / .all()）----
 export function insertTask(task: Task, userId?: string): void {
   db.prepare(
@@ -122,12 +127,22 @@ export function deleteTask(id: string): boolean {
   return existed;
 }
 
+/** 归档/取消归档任务（M22）；返回该任务原本是否存在 */
+export function setTaskArchived(id: string, archived: boolean): boolean {
+  const existed = !!db.prepare(`SELECT 1 FROM tasks WHERE id = ?`).get(id);
+  if (existed) {
+    db.prepare(`UPDATE tasks SET archived = ? WHERE id = ?`).run(archived ? 1 : 0, id);
+  }
+  return existed;
+}
+
 // ---- 任务读 ----
 export function getTask(id: string): Task | null {
   const row = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id) as
     | ({
         id: string; title: string; prompt: string; status: TaskStatus; model: string;
         expert: string; skills: string; workspace: string; checks: string; timeline: string; created: string;
+        archived: number;
       })
     | undefined;
   if (!row) return null;
@@ -159,6 +174,7 @@ export function getTask(id: string): Task | null {
     checks: JSON.parse(row.checks),
     timeline: JSON.parse(row.timeline),
     created: row.created,
+    archived: !!row.archived,
   };
 }
 
@@ -170,27 +186,39 @@ export function countTasksByStatus(): Record<string, number> {
 }
 
 /** 最近 N 个任务（含状态+标题，供仪表盘最近动态） */
-export function recentTasks(limit = 8): { id: string; title: string; created: string; status: string }[] {
-  return db
-    .prepare(`SELECT id, title, created, status FROM tasks ORDER BY created DESC LIMIT ?`)
-    .all(limit) as { id: string; title: string; created: string; status: string }[];
+export function recentTasks(limit = 8): { id: string; title: string; created: string; status: string; archived: boolean }[] {
+  const rows = db
+    .prepare(`SELECT id, title, created, status, archived FROM tasks ORDER BY created DESC LIMIT ?`)
+    .all(limit) as { id: string; title: string; created: string; status: string; archived: number }[];
+  return rows.map((r) => ({ id: r.id, title: r.title, created: r.created, status: r.status, archived: !!r.archived }));
 }
 export interface TaskSummary {
   id: string;
   title: string;
   created: string;
   status: TaskStatus;
+  archived: boolean;
 }
 
-/** 任务列表摘要（供侧栏「最近任务」），按创建时间倒序 */
-export function listTasks(limit = 50, userId?: string): TaskSummary[] {
+/**
+ * 任务列表摘要（供侧栏「最近任务」），按创建时间倒序。
+ * `archivedOnly`：仅列出归档任务（否则默认只列活跃任务——归档任务默认不在主列表出现）。
+ */
+export function listTasks(limit = 50, userId?: string, archivedOnly = false): TaskSummary[] {
+  // 归档筛选列：archivedOnly ? 只看归档 : 只看活跃（归档默认不进主列表）
+  const filter = archivedOnly ? `archived = 1` : `archived = 0`;
+  let rows: { id: string; title: string; created: string; status: TaskStatus; archived: number }[];
   // 多用户隔离：登录用户看自己的 + 全局无主任务；未登录看全部（兼容）
-  const rows = userId
-    ? db.prepare(`SELECT id, title, created, status FROM tasks WHERE user_id = ? OR user_id IS NULL ORDER BY created DESC LIMIT ?`)
-      .all(userId, limit) as { id: string; title: string; created: string; status: TaskStatus }[]
-    : db.prepare(`SELECT id, title, created, status FROM tasks ORDER BY created DESC LIMIT ?`)
-      .all(limit) as { id: string; title: string; created: string; status: TaskStatus }[];
-  return rows.map((r) => ({ id: r.id, title: r.title, created: r.created, status: r.status }));
+  if (userId) {
+    rows = db.prepare(
+      `SELECT id, title, created, status, archived FROM tasks WHERE (user_id = ? OR user_id IS NULL) AND ${filter} ORDER BY created DESC LIMIT ?`,
+    ).all(userId, limit) as typeof rows;
+  } else {
+    rows = db.prepare(
+      `SELECT id, title, created, status, archived FROM tasks WHERE ${filter} ORDER BY created DESC LIMIT ?`,
+    ).all(limit) as typeof rows;
+  }
+  return rows.map((r) => ({ id: r.id, title: r.title, created: r.created, status: r.status, archived: !!r.archived }));
 }
 
 // ============================== 多工作空间 spaces ==============================

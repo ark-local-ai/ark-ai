@@ -17,6 +17,7 @@ export interface TaskDto {
   checks: { label: string; ok: boolean }[];
   timeline: { time: string; label: string }[];
   created: string;
+  archived: boolean;
 }
 
 export async function createTask(prompt: string): Promise<string> {
@@ -477,12 +478,22 @@ export async function listScenarios(): Promise<ScenarioDto[]> {
   return res.json();
 }
 
-export interface RecentTaskDto { id: string; title: string; created: string; status: string; }
+export interface RecentTaskDto { id: string; title: string; created: string; status: string; archived: boolean; }
 
-export async function listTasks(): Promise<RecentTaskDto[]> {
-  const res = await fetch(`${BASE}/api/tasks`, { headers: authHeaders() });
+export async function listTasks(archivedOnly = false): Promise<RecentTaskDto[]> {
+  const res = await fetch(`${BASE}/api/tasks${archivedOnly ? "?archived=1" : ""}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`获取任务列表失败: ${res.status}`);
   return res.json();
+}
+
+/** 归档/取消归档任务（M22） */
+export async function setTaskArchived(id: string, archived: boolean): Promise<void> {
+  const res = await fetch(`${BASE}/api/tasks/${id}/archive`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ archived }),
+  });
+  if (!res.ok) throw new Error(`归档任务失败: ${res.status}`);
 }
 
 /** 重试任务：把 failed/done 任务用原 prompt 重新入队（M17） */
