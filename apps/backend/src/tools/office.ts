@@ -136,6 +136,11 @@ async function genDocx(prompt: string, steps: string[], path: string, sections?:
           }
           return paras;
         }).flat(),
+        // M46：追加管线注入的多余 section（参考资料等，index ≥ steps.length）
+        ...(sections ?? []).slice(steps.length).flatMap((sec) => [
+          new Paragraph({ text: sec.title, heading: HeadingLevel.HEADING_2 }),
+          ...(sec.paragraphs ?? []).map((p) => new Paragraph({ text: p, spacing: { after: 120 } })),
+        ]),
         new Paragraph({ text: "二、说明", heading: HeadingLevel.HEADING_2 }),
         new Paragraph("本文件由 Ark 编排层根据你的需求自动生成，正文可直接编辑。"),
       ],

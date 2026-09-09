@@ -26,7 +26,7 @@ import { memoryRoutes } from "./routes/memories.js";
 import { toolRoutes } from "./routes/tools.js";
 import { imRoutes } from "./routes/im.js";
 import { scanWorkspace } from "./tools/workspace.js";
-import { searchWorkspaceFiles } from "./tools/searchIndex.js";
+import { searchWorkspaceFiles, reindexWorkspace } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
 import { pruneSessions } from "./db/store.js";
 import { resumeUnfinishedTasks } from "./agent/runner.js";
@@ -109,6 +109,7 @@ export async function buildApp() {
 const port = Number(process.env.PORT ?? 4000);
 if (!process.env.ARK_TEST) {
   pruneSessions(); // 启动时清理过期会话
+  reindexWorkspace(); // M20：启动时重建工作空间文件名索引（原为导入副作用，现显式调用避免测试 DB 锁）
   startScheduler(); // 启动本地定时任务调度器
   resumeUnfinishedTasks(); // M24：把上次进程遗留的 queue/running 任务重新入队续跑
   await buildApp().then((app) => app.listen({ port, host: "127.0.0.1" }));

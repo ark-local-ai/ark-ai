@@ -107,7 +107,7 @@ async function runPlanSteps(opts: {
       // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word），注入各步结果，带验收重试（最多 3 次）
       const dir = resolveWorkDir();
       // M10b：多 Agent 内容管线（分析师 → 写手 → 校验），LLM 可用时真内容，否则脚本降级
-      const { sections: contentSections, agents } = await runContentPipeline(task.prompt, plan, kind, modelHint);
+      const { sections: contentSections, agents } = await runContentPipeline(task.prompt, plan, kind, modelHint, userId);
       const anyLLM = agents.analyst || agents.writer || agents.editor;
       const { name, kind: fKind } = await verifyWithRetry(
         () => genOffice(task.prompt, plan, dir, contentSections), 3,

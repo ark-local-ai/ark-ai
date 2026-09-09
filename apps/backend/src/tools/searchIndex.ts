@@ -136,6 +136,3 @@ export function searchWorkspaceFiles(rawQ: string): WorkspaceIndexRow[] {
     spaceId: r.space ? (spaceIds.get(r.space) ?? null) : null,
   }));
 }
-
-// 启动即重建（每次后端起来都把最新磁盘文件收进索引）
-reindexWorkspace();

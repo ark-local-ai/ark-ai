@@ -10,6 +10,7 @@
 
 import { chatWithFailover } from "../models/router";
 import { defaultTool, type ToolInput } from "../tools/registry";
+import { gatherContext, appendRefSection, type PipelineContext } from "../tools/context";
 import type { StepContent } from "./../tools/office";
 
 const TIMEOUT_MS = 20000;
@@ -47,11 +48,14 @@ export interface PipelineResult {
 }
 
 // ---------------- 分析师：提炼关键要点 ----------------
-async function analyst(prompt: string, plan: string[], kind: string, modelHint?: string): Promise<{ points: string[]; viaLLM: boolean }> {
+async function analyst(
+  prompt: string, plan: string[], kind: string, modelHint?: string, contextText?: string,
+): Promise<{ points: string[]; viaLLM: boolean }> {
   try {
+    const ctx = contextText ? `\n参考资料（可用）：\n${contextText}` : "";
     const raw = await llmCall(
-      "你是首席分析师。根据用户需求与执行计划，提炼 3~5 条最关键的观点/要点。严格只输出 JSON 数组，每项为字符串，不要其它文字。",
-      `需求：${prompt}\n执行计划：\n${plan.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n交付类型：${kind}`,
+      "你是首席分析师。根据用户需求与执行计划，提炼 3~5 条最关键的观点/要点。可参考提供的参考资料。严格只输出 JSON 数组，每项为字符串，不要其它文字。",
+      `需求：${prompt}${ctx}\n执行计划：\n${plan.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n交付类型：${kind}`,
       modelHint,
     );
     const arr = JSON.parse(raw) as unknown;
@@ -79,12 +83,13 @@ function keywordPoints(prompt: string, plan: string[]): string[] {
 
 // ---------------- 写手：把要点展开成 sections ----------------
 async function writer(
-  prompt: string, plan: string[], kind: string, points: string[], modelHint?: string,
+  prompt: string, plan: string[], kind: string, points: string[], modelHint?: string, contextText?: string,
 ): Promise<{ sections: StepContent[]; viaLLM: boolean }> {
   try {
+    const ctx = contextText ? `\n参考资料（可用）：\n${contextText}` : "";
     const raw = await llmCall(
-      "你是专业内容撰稿人。基于分析师要点，为交付文件生成正文，输出 JSON：{\"sections\":[{\"title\":\"步骤标题\",\"paragraphs\":[\"段落1\",\"段落2\"]}, ...]}。语言中文，正文具体专业可读。严格只输出 JSON。",
-      `需求：${prompt}\n分析师要点：\n${points.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n交付类型：${kind}`,
+      "你是专业内容撰稿人。基于分析师要点，为交付文件生成正文，可参考提供的参考资料，输出 JSON：{\"sections\":[{\"title\":\"步骤标题\",\"paragraphs\":[\"段落1\",\"段落2\"]}, ...]}。语言中文，正文具体专业可读。严格只输出 JSON。",
+      `需求：${prompt}${ctx}\n分析师要点：\n${points.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n交付类型：${kind}`,
       modelHint,
     );
     const parsed = JSON.parse(raw) as { sections?: { title?: string; paragraphs?: string[] }[] };
@@ -134,22 +139,28 @@ async function editor(
   }
 }
 
-/** 多 Agent 内容管线：分析 → 写 → 校验，返回最终 sections。C2：可带 modelHint 偏好模型 */
+/** 多 Agent 内容管线：分析 → 写 → 校验，返回最终 sections。C2：可带 modelHint 偏好模型。M46：采集 web/knowledge 上下文注入并追加参考资料 section */
 export async function runContentPipeline(
   prompt: string,
   plan: string[],
   kind: "ppt" | "xls" | "doc",
   modelHint?: string,
+  userId?: string,
 ): Promise<PipelineResult> {
+  // M46：采集上下文（提示词内网址 web.read + 本地知识 search.knowledge），失败单项静默
+  const ctx: PipelineContext = await gatherContext(prompt, userId);
+  const contextText = ctx.hasRef ? ctx.contextText : undefined;
   // 分析师
-  const { points, viaLLM: analystLLM } = await analyst(prompt, plan, kind, modelHint);
+  const { points, viaLLM: analystLLM } = await analyst(prompt, plan, kind, modelHint, contextText);
   // 写手（依赖分析师要点）
-  const { sections, viaLLM: writerLLM } = await writer(prompt, plan, kind, points, modelHint);
+  const { sections, viaLLM: writerLLM } = await writer(prompt, plan, kind, points, modelHint, contextText);
   // 校验
   const { sections: finalSections, viaLLM: editorLLM } = await editor(prompt, kind, sections, modelHint);
+  // M46：把采集到的参考资料追加成最末 section（仅对话页/文档类展示；无引用则不追加）
+  const withRefs = appendRefSection(finalSections, ctx);
 
   return {
-    sections: finalSections,
+    sections: withRefs,
     agents: { analyst: analystLLM, writer: writerLLM, editor: editorLLM },
   };
 }
