@@ -7,7 +7,7 @@ import {
   ArkLogo, IconCollapse,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
-import { listTasks, listSpaces, createSpace, setActiveSpace, deleteSpace, getAuthStatus, type SpaceDto, type AuthUser } from "../api";
+import { listTasks, deleteTask, retryTask, listSpaces, createSpace, setActiveSpace, deleteSpace, getAuthStatus, type SpaceDto, type AuthUser } from "../api";
 import AuthModal from "../components/AuthModal";
 
 type Mode = "task" | "space";
@@ -40,7 +40,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const [tasks, setTasks] = useState(mockRecentTasks);
   useEffect(() => {
     listTasks()
-      .then((ts) => setTasks(ts.map((t) => ({ id: t.id, title: t.title, time: t.created, space: null as string | null }))))
+      .then((ts) => setTasks(ts.map((t) => ({ id: t.id, title: t.title, time: t.created, space: null as string | null, status: t.status }))))
       .catch(() => {});
   }, []);
   // 真实空间列表（来自后端 /api/spaces），排除默认空间（放进「任务」抽屉）
@@ -102,6 +102,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const confirmDel = () => {
     if (!delTarget) return;
     if (delTarget.kind === "task") {
+      // 删除真实任务（调后端，含步骤/产物）
+      deleteTask(delTarget.id).catch(() => {});
       setTasks((ts) => ts.filter((t) => t.id !== delTarget.id));
     } else {
       // 删除真实空间（调后端，而非仅本地过滤）
@@ -110,6 +112,15 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
       setTasks((ts) => ts.filter((t) => t.space !== delTarget.id));
     }
     setDelTarget(null);
+  };
+
+  // 重试失败/已完成任务（M17）：重新入队后用原 id 重新拉一次列表
+  const doRetryTask = async (id: string) => {
+    setCtxMenu(null);
+    try {
+      await retryTask(id);
+      nav("/app/task");
+    } catch { /* 忽略 */ }
   };
 
   const openCtx = (kind: "task" | "space", id: string, title: string, e: React.MouseEvent) => {
@@ -335,15 +346,28 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               </>
             ) : (
               <>
-                <button className="sb-ctx-item" onClick={closeCtx}><IconFolderOpen size={14} /> 打开文件夹</button>
-                <button className="sb-ctx-item" onClick={closeCtx}><IconRename size={14} /> 重命名</button>
-                <button className="sb-ctx-item" onClick={closeCtx}><IconShare size={14} /> 分享任务</button>
-                <button
-                  className="sb-ctx-item danger"
-                  onClick={() => { setCtxMenu(null); setDelTarget({ kind: "task", id: ctxMenu.id }); }}
-                >
-                  <IconTrash size={14} /> 删除任务
-                </button>
+                {(() => {
+                  const t = tasks.find((x) => x.id === ctxMenu.id);
+                  const canRetry = t && (t.status === "failed" || t.status === "done");
+                  return (
+                    <>
+                      <button className="sb-ctx-item" onClick={closeCtx}><IconFolderOpen size={14} /> 打开文件夹</button>
+                      <button className="sb-ctx-item" onClick={closeCtx}><IconRename size={14} /> 重命名</button>
+                      <button className="sb-ctx-item" onClick={closeCtx}><IconShare size={14} /> 分享任务</button>
+                      {canRetry && (
+                        <button className="sb-ctx-item" onClick={() => doRetryTask(ctxMenu.id)}>
+                          <IconClock size={14} /> 重试
+                        </button>
+                      )}
+                      <button
+                        className="sb-ctx-item danger"
+                        onClick={() => { setCtxMenu(null); setDelTarget({ kind: "task", id: ctxMenu.id }); }}
+                      >
+                        <IconTrash size={14} /> 删除任务
+                      </button>
+                    </>
+                  );
+                })()}
               </>
             )}
           </div>
