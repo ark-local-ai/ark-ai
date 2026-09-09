@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { enqueueTask } from "../agent/runner.js";
-import { getTask, listTasks } from "../db/store.js";
+import { getTask, listTasks, deleteTask } from "../db/store.js";
 import { subscribe } from "../agent/events.js";
 import { currentUser } from "./auth.js";
 
@@ -27,6 +27,25 @@ export async function taskRoutes(app: FastifyInstance) {
     const task = getTask(req.params.id);
     if (!task) return reply.code(404).send({ error: "任务不存在" });
     return reply.send(task);
+  });
+
+  // 重试：把 failed / done 任务用原 prompt 重新入队再跑一次（M17）
+  app.post<{ Params: { id: string } }>("/:id/retry", async (req, reply) => {
+    const id = req.params.id;
+    const task = getTask(id);
+    if (!task) return reply.code(404).send({ error: "任务不存在" });
+    if (task.status === "running" || task.status === "queue") {
+      return reply.code(409).send({ error: "任务正在执行中，暂不能重试" });
+    }
+    enqueueTask(id, task.prompt, currentUser(req)?.id);
+    return reply.send({ taskId: id, status: "queue" });
+  });
+
+  // 删除任务（含其步骤/产物，M17）
+  app.delete<{ Params: { id: string } }>("/:id", async (req, reply) => {
+    const ok = deleteTask(req.params.id);
+    if (!ok) return reply.code(404).send({ error: "任务不存在" });
+    return reply.send({ ok: true });
   });
 
   // SSE：订阅任务进度事件流

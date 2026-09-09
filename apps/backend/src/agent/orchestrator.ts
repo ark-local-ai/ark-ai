@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Task, TaskStep, Artifact } from "../types";
 import {
   insertTask, insertStep, updateStepStatus, updateTaskStatus,
-  insertArtifact, getTask, updateTaskChecksAndTimeline, getActiveSpace,
+  insertArtifact, getTask, updateTaskChecksAndTimeline, getActiveSpace, resetTask,
 } from "../db/store";
 import { publish } from "./events";
 import { planTask } from "./planner";
@@ -55,6 +55,8 @@ export async function runTask(id: string, prompt: string, userId?: string): Prom
     created,
   };
 
+  // 幂等复位：重试同一 id 时先清掉上次残留的 steps/artifacts/主行，再写新快照
+  resetTask(id);
   // 持久化任务 + 步骤
   insertTask(task, userId);
   const stepIds: number[] = [];

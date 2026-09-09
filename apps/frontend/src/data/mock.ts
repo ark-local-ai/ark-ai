@@ -24,7 +24,7 @@ export interface Job { id: string; name: string; trigger: string; action: string
 export interface JobLog { time: string; name: string; result: string; ok: boolean }
 export interface AppFile { name: string; kind: string; size: string; time: string; status?: string; statusColor?: string }
 export interface SpaceFile { name: string; dir: boolean; color?: string }
-export interface RecentTask { id: string; title: string; time: string; space: string | null }
+export interface RecentTask { id: string; title: string; time: string; space: string | null; status?: string }
 
 // ---- 场景库（WorkBuddy 式封装：「场景」→「参考提示词」，选中后落到首页输入台） ----
 export interface ScenePrompt { text: string; note: string }
