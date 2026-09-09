@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
+import { subscribeGlobal } from "../api";
 import { IconNote, IconExpand } from "../components/icons";
 
 const TITLES: Record<string, string> = {
@@ -26,6 +27,22 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const title = TITLES[loc.pathname] ?? "任务";
   const hasTabBar = TAB_BARED.includes(loc.pathname);
+
+  // M21：浏览器通知——任务完成/失败时提醒（需用户授权），覆盖所有 /app 页
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+    return subscribeGlobal((ev) => {
+      if (ev.type !== "done" && ev.type !== "error") return;
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (Notification.permission !== "granted") return;
+      const isDone = ev.type === "done";
+      new Notification(isDone ? "任务完成" : "任务失败", {
+        body: isDone ? `任务 ${ev.taskId ?? ""} 已生成成果` : `任务 ${ev.taskId ?? ""} 执行失败，可重试`,
+      });
+    });
+  }, []);
 
   return (
     <div className="app">

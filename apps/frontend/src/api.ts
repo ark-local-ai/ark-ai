@@ -53,6 +53,28 @@ export function subscribeTask(id: string, onEvent: SseHandler): () => void {
   return () => es.close();
 }
 
+/** 全局事件回调：`type` + 展开后的 data（全局事件 data = { taskId, … }） */
+export type GlobalEventHandler = (event: {
+  type: SseEventType;
+  taskId?: string;
+  data: Record<string, unknown>;
+}) => void;
+
+/** 订阅【所有】任务事件流（/api/events）；返回取消函数（M21） */
+export function subscribeGlobal(onEvent: GlobalEventHandler): () => void {
+  const es = new EventSource(`${BASE}/api/events`);
+  const types: SseEventType[] = [
+    "plan", "step", "artifact", "deliver", "check", "done", "error",
+  ];
+  types.forEach((t) => {
+    es.addEventListener(t, (e) => {
+      const data = JSON.parse((e as MessageEvent).data) as Record<string, unknown>;
+      onEvent({ type: t, taskId: data.taskId as string | undefined, data });
+    });
+  });
+  return () => es.close();
+}
+
 export function workspaceUrl(name: string, spaceId?: string): string {
   const q = spaceId ? `?space=${encodeURIComponent(spaceId)}` : "";
   return `${BASE}/api/workspace/${encodeURIComponent(name)}${q}`;

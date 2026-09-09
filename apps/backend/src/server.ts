@@ -15,6 +15,7 @@ import { spaceRoutes, resolveSpaceDir } from "./routes/spaces.js";
 import { authRoutes } from "./routes/auth.js";
 import { statsRoutes } from "./routes/stats.js";
 import { chatSessionRoutes } from "./routes/chat-sessions.js";
+import { globalEventsRoutes } from "./routes/events.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { searchWorkspaceFiles } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
@@ -33,6 +34,7 @@ export async function buildApp() {
   app.register(channelRoutes, { prefix: "/api/channels" });
   app.register(chatRoutes, { prefix: "/api/chat" });
   app.register(chatSessionRoutes, { prefix: "/api/chat/sessions" });
+  app.register(globalEventsRoutes, { prefix: "/api/events" });
   app.register(skillRoutes, { prefix: "/api/skills" });
   app.register(expertRoutes, { prefix: "/api/experts" });
   app.register(jobRoutes, { prefix: "/api/jobs" });

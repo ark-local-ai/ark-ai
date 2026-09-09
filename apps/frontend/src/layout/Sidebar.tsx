@@ -7,7 +7,7 @@ import {
   ArkLogo, IconCollapse,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
-import { listTasks, deleteTask, retryTask, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult } from "../api";
+import { listTasks, deleteTask, retryTask, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, subscribeGlobal, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult } from "../api";
 import AuthModal from "../components/AuthModal";
 
 type Mode = "task" | "space";
@@ -40,10 +40,17 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const [ctxMenu, setCtxMenu] = useState<null | { kind: "task" | "space"; id: string; x: number; y: number; title: string }>(null);
 
   const [tasks, setTasks] = useState(mockRecentTasks);
-  useEffect(() => {
+  const refreshTasks = () => {
     listTasks()
       .then((ts) => setTasks(ts.map((t) => ({ id: t.id, title: t.title, time: t.created, space: null as string | null, status: t.status }))))
       .catch(() => {});
+  };
+  useEffect(refreshTasks, []);
+  // M21：订阅全局任务事件，任务完成/失败时自动刷新列表（修复“创建/跑完任务后列表不更新”的 stale 问题）
+  useEffect(() => {
+    return subscribeGlobal((ev) => {
+      if (ev.type === "done" || ev.type === "error") refreshTasks();
+    });
   }, []);
   // 真实空间列表（来自后端 /api/spaces），排除默认空间（放进「任务」抽屉）
   const [spaceList, setSpaceList] = useState<SpaceDto[]>([]);
