@@ -113,6 +113,20 @@ describe("任务/统计/搜索路由", () => {
   });
 });
 
+describe("审计 API", () => {
+  it("写请求经 onResponse 钩子落审计，GET /api/audit 可读", async () => {
+    // 触发一个真实的 HTTP 写请求
+    const r = await post("/api/auth/register", { username: "audit_probe", password: "x1234567", displayName: "probe" });
+    expect(r.statusCode).toBe(201);
+    const probe = await get("/api/audit");
+    expect(probe.statusCode).toBe(200);
+    const rows = probe.json() as { action: string; detail: string; userId?: string }[];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.some((x) => x.detail.includes("/api/auth/register"))).toBe(true);
+    expect(rows.some((x) => x.action === "登录" || x.action === "注册用户")).toBe(true);
+  });
+});
+
 describe("对话搜索路由", () => {
   it("发消息后 /api/chat/search 命中", async () => {
     const sid = store.createChatSession("会话1", undefined);

@@ -579,3 +579,58 @@ export function destroySession(token: string): void {
 export function pruneSessions(): void {
   db.prepare(`DELETE FROM sessions WHERE expires < ?`).run(Date.now());
 }
+
+// ===== 操作审计日志（M29） =====
+// 记录"谁在何时做了什么写操作"（登录/注册/建删任务/渠道 CRUD/空间 CRUD 等），
+// 供合规审计与排查。写入是 fire-and-forget（不失败回滚业务），查询按时间倒序。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    user_id TEXT,
+    user_name TEXT,
+    action TEXT NOT NULL,
+    target TEXT,
+    detail TEXT
+  );
+`);
+
+export interface AuditEntry {
+  id: number;
+  ts: string;
+  userId?: string;
+  userName?: string;
+  action: string;
+  target?: string;
+  detail?: string;
+}
+
+/** 追加一条审计记录（本地写，不抛错——审计不应影响业务） */
+export function appendAudit(entry: Omit<AuditEntry, "id" | "ts">): void {
+  try {
+    db.prepare(
+      `INSERT INTO audit_log (ts, user_id, user_name, action, target, detail) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      new Date().toLocaleString("zh-CN", { hour12: false }),
+      entry.userId ?? null,
+      entry.userName ?? null,
+      entry.action,
+      entry.target ?? null,
+      entry.detail ?? null,
+    );
+  } catch {
+    /* 审计失败静默，不影响主流程 */
+  }
+}
+
+/** 最近 N 条审计记录（供审计查看；默认 200） */
+export function listAudit(limit = 200): AuditEntry[] {
+  return db
+    .prepare(`SELECT id, ts, user_id AS userId, user_name AS userName, action, target, detail FROM audit_log ORDER BY id DESC LIMIT ?`)
+    .all(limit) as unknown as AuditEntry[];
+}
+
+/** 清空审计日志（可选项；保留架构接口） */
+export function clearAudit(): void {
+  db.exec(`DELETE FROM audit_log;`);
+}

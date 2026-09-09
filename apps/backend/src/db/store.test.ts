@@ -175,3 +175,37 @@ describe("auth", () => {
     expect(store.resolveSession(token)).toBeUndefined();
   });
 });
+
+describe("audit", () => {
+  it("appendAudit 写入 + listAudit 按倒序返回", () => {
+    store.clearAudit();
+    store.appendAudit({ userId: "u-1", userName: "Alice", action: "创建任务", target: "abc", detail: "POST /api/tasks" });
+    store.appendAudit({ userId: "u-1", userName: "Alice", action: "删除任务", target: "abc", detail: "DELETE /api/tasks/abc" });
+    const rows = store.listAudit();
+    expect(rows.length).toBe(2);
+    // 倒序：最新的在前
+    expect(rows[0].action).toBe("删除任务");
+    expect(rows[0].target).toBe("abc");
+    expect(rows[1].action).toBe("创建任务");
+    expect(rows[1].userName).toBe("Alice");
+    expect(rows[0].userId).toBe("u-1");
+  });
+
+  it("listAudit 支持 limit", () => {
+    store.clearAudit();
+    for (let i = 0; i < 5; i++) store.appendAudit({ action: `动作${i}` });
+    expect(store.listAudit(2).length).toBe(2);
+    expect(store.listAudit().length).toBe(5);
+    store.clearAudit();
+  });
+
+  it("appendAudit 匿名（无 user）也可写", () => {
+    store.clearAudit();
+    store.appendAudit({ action: "登录" }); // 无 userId/userName
+    const rows = store.listAudit();
+    expect(rows.length).toBe(1);
+    expect(rows[0].action).toBe("登录");
+    expect(rows[0].userId).toBeNull(); // SQLite 无 user_id 时读回 null 而非 undefined
+    store.clearAudit();
+  });
+});

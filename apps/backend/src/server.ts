@@ -16,6 +16,7 @@ import { authRoutes } from "./routes/auth.js";
 import { statsRoutes } from "./routes/stats.js";
 import { chatSessionRoutes } from "./routes/chat-sessions.js";
 import { globalEventsRoutes } from "./routes/events.js";
+import { auditRoutes, installAuditHook } from "./routes/audit.js";
 import { scanWorkspace } from "./tools/workspace.js";
 import { searchWorkspaceFiles } from "./tools/searchIndex.js";
 import { startScheduler } from "./scheduler/jobs.js";
@@ -31,6 +32,8 @@ export async function buildApp() {
   // Fastify 默认已为每个请求生成唯一 reqId（req.log 可用），无需自定义。
   const app = Fastify({ logger: loggerOptions });
 
+  // 全局写请求审计钩子（必须在根上下文按装，否则只审到自己的插件路由）
+  installAuditHook(app);
 
   app.register(cors, { origin: true });
 
@@ -48,6 +51,7 @@ export async function buildApp() {
   app.register(spaceRoutes, { prefix: "/api/spaces" });
   app.register(authRoutes, { prefix: "/api/auth" });
   app.register(statsRoutes, { prefix: "/api/stats" });
+  app.register(auditRoutes, { prefix: "/api/audit" });
 
   // 工作空间列表：?space=<id> 指定空间目录，缺省扫根（默认工作空间）
   app.get("/api/workspace", async (req) => {
