@@ -3,7 +3,7 @@ import { ftColor, ftLabel } from "../data/mock";
 import {
   listSpaces, listSpaceFiles, createSpace, setActiveSpace, deleteSpace,
   workspaceUrl, searchWorkspace, listFileVersions, rollbackFileVersion,
-  webSearch, webRead, saveToWorkspace, getSearchSource, setSearchSourceEnabled,
+  webSearch, webRead, webRender, saveToWorkspace, getSearchSource, setSearchSourceEnabled,
   type WebSearchHit,
   type SpaceDto, type WorkspaceFileDto, type WorkspaceSearchResult, type FileVersionDto,
 } from "../api";
@@ -115,11 +115,21 @@ export default function Workspace() {
     if (r.error) { setWhits(null); setWerr(r.error); return; }
     setWhits(r.hits);
   };
+  // M51：读正文优先 web.read（快），拿不到（报错/为空=JS 渲染页）→ 自动用无头浏览器渲染兜底
+  const [wmode, setWmode] = useState<Record<string, "read" | "render" | "err">>({});
+  const readOrRender = async (url: string): Promise<{ text: string; error?: string; mode: "read" | "render" | "err" }> => {
+    const r = await webRead(url);
+    if (!r.error && r.text?.trim()) return { text: r.text, mode: "read" };
+    const b = await webRender(url).catch(() => ({ url, title: "", text: "", length: 0, error: "浏览器不可用" as string }));
+    if (b.error || !b.text?.trim()) return { text: "", error: b.error || "网页无法读取", mode: "err" };
+    return { text: b.text, mode: "render" };
+  };
   const doRead = async (h: WebSearchHit) => {
     if (wover[h.url]) { setWover((o) => { const n = { ...o }; delete n[h.url]; return n; }); return; }
     setWreading(h.url);
-    const r = await webRead(h.url);
+    const r = await readOrRender(h.url);
     setWreading("");
+    setWmode((m) => ({ ...m, [h.url]: r.error ? "err" : r.mode }));
     setWover((o) => ({ ...o, [h.url]: r.error ? `⚠ ${r.error}` : r.text }));
   };
 
@@ -144,10 +154,11 @@ export default function Workspace() {
     let text = wover[h.url];
     if (!text || text.startsWith("⚠ ")) {
       setWreading(h.url);
-      const r = await webRead(h.url);
+      const r = await readOrRender(h.url);
       setWreading("");
-      if (r.error) { setSaveMsg({ ok: false, text: `读取失败：${r.error}` }); return; }
+      if (r.error || !r.text?.trim()) { setSaveMsg({ ok: false, text: `读取失败：${r.error || "内容为空"}` }); return; }
       text = r.text;
+      setWmode((m) => ({ ...m, [h.url]: r.mode }));
       setWover((o) => ({ ...o, [h.url]: r.text }));
     }
     const res = await saveToWorkspace({ title: h.title, url: h.url, text, source: "search" });
@@ -253,6 +264,11 @@ export default function Workspace() {
                         style={{ fontSize: 13, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>
                         {h.title}
                       </a>
+                      {wmode[h.url] === "render" && (
+                        <span style={{ fontSize: 10.5, color: "var(--text-3)", border: "1px solid var(--line)", borderRadius: 6, padding: "1px 5px", background: "var(--bg)" }}>
+                          浏览器渲染
+                        </span>
+                      )}
                       <button className="btn soft sm" onClick={() => doSaveHit(h)} title="把正文保存为资料库 markdown 文件">
                         {wreading === h.url ? "读取中…" : "存资料库"}
                       </button>

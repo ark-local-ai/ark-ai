@@ -164,6 +164,28 @@ export async function webRead(url: string): Promise<{ url: string; title: string
   return res.json() as Promise<{ url: string; title: string; text: string; length: number; error?: string }>;
 }
 
+// ===== M51 浏览器渲染读取（POST /api/tools/browser.render）=====
+export interface WebRenderResult {
+  url: string;
+  title: string;
+  /** 渲染后抽出的正文（能拿到 web.read 拿不到的 SPA/JS 客户端渲染内容） */
+  text: string;
+  length: number;
+  error?: string;
+}
+/** 无头浏览器真渲染再抽正文——web.read 失败/空（JS 渲染页）时的兜底 */
+export async function webRender(url: string): Promise<WebRenderResult> {
+  const res = await authFetch("/api/tools/browser.render", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const e = (await res.json().catch(() => ({}))) as { error?: string };
+    return { url, title: "", text: "", length: 0, error: e.error ?? `浏览器渲染失败(${res.status})` };
+  }
+  return res.json() as Promise<WebRenderResult>;
+}
+
 // ===== M50 保存到资料库 + 联网搜索源设置 =====
 export interface SaveToWorkspaceResult {
   name: string;
