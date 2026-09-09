@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { enqueueTask } from "../agent/runner.js";
-import { getTask, listTasks, deleteTask, setTaskArchived } from "../db/store.js";
+import { getTask, listTasks, deleteTask, setTaskArchived, createTaskTemplate } from "../db/store.js";
 import { subscribe } from "../agent/events.js";
 import { currentUser } from "./auth.js";
 
@@ -44,6 +44,27 @@ export async function taskRoutes(app: FastifyInstance) {
     const task = getTask(req.params.id);
     if (!task) return reply.code(404).send({ error: "任务不存在" });
     return reply.send(task);
+  });
+
+  // 另存为模板（C1）：从已完成任务一键固化为模板（复用 prompt/expert/skills/model）
+  app.post<{ Params: { id: string }; Body: { name?: string } }>("/:id/template", async (req, reply) => {
+    const task = getTask(req.params.id);
+    if (!task) return reply.code(404).send({ error: "任务不存在" });
+    if (task.status !== "done") {
+      return reply.code(409).send({ error: "只有已完成的任务可以固化为模板" });
+    }
+    const id = createTaskTemplate(
+      {
+        name: req.body?.name?.trim() || `模板 · ${task.title}`,
+        desc: task.prompt.slice(0, 80) || undefined,
+        prompt: task.prompt,
+        expert: task.expert,
+        skills: task.skills,
+        model: task.model,
+      },
+      currentUser(req)?.id,
+    );
+    return reply.code(201).send({ id });
   });
 
   // 重试：把 failed / done 任务用原 prompt 重新入队再跑一次（M17）

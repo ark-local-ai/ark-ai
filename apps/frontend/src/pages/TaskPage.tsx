@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { IconCheck } from "../components/icons";
 import { ftColor, ftLabel } from "../data/mock";
-import { getTask, subscribeTask, retryTask, deleteTask, setTaskArchived, workspaceUrl, type TaskDto } from "../api";
+import { getTask, subscribeTask, retryTask, deleteTask, setTaskArchived, workspaceUrl, saveTaskAsTemplate, type TaskDto } from "../api";
 
 export default function TaskPage() {
   const [params] = useSearchParams();
@@ -110,6 +110,22 @@ export default function TaskPage() {
     } catch { /* 忽略 */ }
   };
 
+  const doSaveTemplate = async () => {
+    if (!taskId || !task) return;
+    const name = window.prompt("模板名称：", `模板 · ${task.title}`);
+    if (name === null) return;
+    try {
+      const tplId = await saveTaskAsTemplate(taskId, name.trim());
+      if (window.confirm(`已保存为模板「${name.trim() || task.title}」。前往模板页管理？`)) {
+        nav(`/app/templates`);
+      }
+      void tplId;
+    } catch (e) {
+      console.error(e);
+      alert("另存为模板失败，请确认后端已启动");
+    }
+  };
+
 
   return (
     <div className="page">
@@ -122,6 +138,9 @@ export default function TaskPage() {
                 {(task.status === "failed" || task.status === "done") && (
                   <>
                     <button className="btn ghost sm" disabled={busy} onClick={doRetry}>重试</button>
+                    {task.status === "done" && (
+                      <button className="btn ghost sm" onClick={doSaveTemplate}>另存为模板</button>
+                    )}
                     <button className="btn ghost sm" onClick={() => doArchive(!task.archived)}>
                       {task.archived ? "取消归档" : "归档"}
                     </button>

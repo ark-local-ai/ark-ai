@@ -215,3 +215,27 @@ describe("任务模板 API（M33）", () => {
     await delTemplate(id);
   });
 });
+
+describe("任务另存为模板 API（C1）", () => {
+  it("POST /api/tasks/:id/template 从已完成任务固化为模板；非终态 409", async () => {
+    // 用 makeTask 直接落一个 done 任务到库
+    const task = makeTask({ status: "done", prompt: "生成一份调研报告", expert: "数据分析师", model: "c1·deepseek" });
+    store.insertTask(task);
+    const r = await post(`/api/tasks/${task.id}/template`, { name: "调研模板" });
+    expect(r.statusCode).toBe(201);
+    const tplId: string = r.json().id;
+    expect(tplId).toBeTruthy();
+    // 模板已入库且继承了 prompt/expert/model
+    const t = store.getTaskTemplate(tplId);
+    expect(t?.name).toBe("调研模板");
+    expect(t?.prompt).toBe("生成一份调研报告");
+    expect(t?.expert).toBe("数据分析师");
+    expect(t?.model).toBe("c1·deepseek");
+
+    // 非 done 任务 → 409
+    const run = makeTask({ status: "running", prompt: "进行中" });
+    store.insertTask(run);
+    const nope = await post(`/api/tasks/${run.id}/template`, {});
+    expect(nope.statusCode).toBe(409);
+  });
+});

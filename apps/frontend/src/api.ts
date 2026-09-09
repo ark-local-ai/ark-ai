@@ -670,3 +670,15 @@ export async function runTemplate(id: string): Promise<string> {
   const data = (await res.json()) as { taskId: string };
   return data.taskId;
 }
+
+/** 另存为模板（C1）：从已完成任务一键固化为模板，返回模板 id */
+export async function saveTaskAsTemplate(id: string, name?: string): Promise<string> {
+  const res = await fetch(`${BASE}/api/tasks/${id}/template`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(name ? { name } : {}),
+  });
+  if (!res.ok) throw new Error(`另存为模板失败: ${res.status}`);
+  const data = (await res.json()) as { id: string };
+  return data.id;
+}

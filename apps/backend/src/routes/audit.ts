@@ -21,6 +21,7 @@ function labelFor(method: string, url: string): string {
   // 任务
   if (u.startsWith("/api/tasks") && m === "POST" && u.includes("/retry")) return "重试任务";
   if (u.startsWith("/api/tasks") && m === "POST" && u.includes("/archive")) return "归档/取消归档任务";
+  if (u.startsWith("/api/tasks") && m === "POST" && u.includes("/template")) return "另存为模板";
   if (u.startsWith("/api/tasks") && m === "POST") return "创建任务";
   if (u.startsWith("/api/tasks") && m === "DELETE") return "删除任务";
   // 渠道
