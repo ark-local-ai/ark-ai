@@ -1057,6 +1057,9 @@ export function findDuplicateMemories(userId?: string, kind?: string): {
 
 /**
  * M59 一键合并重复记忆：把 removeIds 的 tags 并入 keepId（去重、逗号分隔），然后删除被合并的记忆。
+ * M63 维护闭环补全：合并时一并继承 **来源溯源** 与 **时效**——
+ *    · source：若 keep 没有来源（未知/手动），从被合并记忆中继承最早带来源的一条，避免合并后丢失 provenance；
+ *    · expires_at：取 keep 与被合并记忆里**最早过期**的一个（更保守），避免并出来的记忆悄悄超出任一成员的保鲜期。
  * 只允许操作当前用户可见的记忆（user_id = 本人 或全局），杜绝越权合并/删除他人记忆。
  * 返回实际保留与被删的 id；keep 或任一 remove 不可见则整组拒绝（保持幂等、不留半删状态）。
  */
@@ -1078,14 +1081,26 @@ export function mergeMemories(
   const tagSet = new Set(
     (keep.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean),
   );
+  // M63：source 继承候选 + 时效取最早过期
+  let source = keep.source ?? null;
+  let expiresAt: number | null = keep.expires_at ?? null;
   for (const id of removeIds) {
     const m = getMemory(id);
-    if (!m || !m.tags) continue;
-    for (const t of m.tags.split(",").map((x) => x.trim()).filter(Boolean)) tagSet.add(t);
+    if (!m) continue;
+    if (m.tags) {
+      for (const t of m.tags.split(",").map((x) => x.trim()).filter(Boolean)) tagSet.add(t);
+    }
+    // 继承最早一个有来源的被合并记忆的溯源（keep 无来源时）
+    if (!source && m.source) source = m.source;
+    // 过期取更早（更保守）
+    if (expiresAt === null || (m.expires_at !== null && m.expires_at < expiresAt)) {
+      expiresAt = m.expires_at;
+    }
   }
   const mergedTags = [...tagSet].join(",");
 
-  db.prepare(`UPDATE memories SET tags = ? WHERE id = ?`).run(mergedTags || null, keepId);
+  db.prepare(`UPDATE memories SET tags = ?, source = ?, expires_at = ? WHERE id = ?`)
+    .run(mergedTags || null, source, expiresAt, keepId);
   deleteMemories(removeIds, userId);
   return { kept: keepId, removed: removeIds };
 }

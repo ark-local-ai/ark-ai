@@ -489,6 +489,45 @@ describe("记忆时效（M61 store）", () => {
   });
 });
 
+describe("记忆合并维护闭环（M63 store）", () => {
+  it("mergeMemories 保时间为空时继承来源 + 取最早过期", () => {
+    const keep = store.createMemory({ kind: "note", content: "同一件事", tags: "" }, "u1"); // 无来源、无时效
+    const shortExpiry = Date.now() + 3600000; // 一小时后
+    const dupWithSrc = store.createMemory(
+      { kind: "preference", content: "同一件事", tags: "界面", source: "chat:seed1", expiresAtMs: Date.now() + 86400000 },
+      "u1",
+    );
+    const dupShort = store.createMemory(
+      { kind: "fact", content: "同一件事", tags: "设计", source: "chat-distill:seed2", expiresAtMs: shortExpiry },
+      "u1",
+    );
+    store.mergeMemories(keep, [dupWithSrc, dupShort], "u1");
+    const k = store.getMemory(keep)!;
+    // 继承最早一个有来源的（dupWithSrc 的 source）
+    expect(k.source).toBe("chat:seed1");
+    // 取最早过期（dupShort 的一小时后）
+    expect(k.expires_at).toBe(shortExpiry);
+  });
+
+  it("mergeMemories 保留 keep 已有来源/更早时效不被覆盖", () => {
+    const keepExpiry = Date.now() + 60000; // keep 一分钟后的更早过期
+    const keep = store.createMemory(
+      { kind: "note", content: "另一件事", tags: "", source: "manual", expiresAtMs: keepExpiry },
+      "u1",
+    );
+    const dup = store.createMemory(
+      { kind: "note", content: "另一件事", tags: "标签", source: "chat:later", expiresAtMs: Date.now() + 86400000 },
+      "u1",
+    );
+    store.mergeMemories(keep, [dup], "u1");
+    const k = store.getMemory(keep)!;
+    // keep 已有来源 → 不被覆盖
+    expect(k.source).toBe("manual");
+    // keep 更早过期 → 保留
+    expect(k.expires_at).toBe(keepExpiry);
+  });
+});
+
 describe("记忆批量整理（M57 store）", () => {
   beforeEach(() => {
     resetTables();
