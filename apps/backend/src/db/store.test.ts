@@ -479,6 +479,41 @@ describe("记忆批量整理（M57 store）", () => {
   });
 });
 
+describe("记忆合并（M59 store）", () => {
+  beforeEach(() => {
+    resetTables();
+  });
+
+  it("mergeMemories 合并 tags 后删除重复，keep 保留", () => {
+    const keep = store.createMemory({ kind: "note", content: "用户偏好暖色", tags: "偏好,界面" }, "u1");
+    const dup = store.createMemory({ kind: "note", content: "用户偏好暖色", tags: "设计" }, "u1");
+    const r = store.mergeMemories(keep, [dup], "u1");
+    expect(r.kept).toBe(keep);
+    expect(r.removed).toEqual([dup]);
+    const g = store.getMemory(keep);
+    expect(g).not.toBeNull();
+    // 集合比较：三个来源标签都应合并且出现一次（顺序无关）
+    const tags = (g!.tags ?? "").split(",").filter(Boolean);
+    expect(tags).toHaveLength(3);
+    for (const t of ["偏好", "界面", "设计"]) expect(tags).toContain(t);
+    expect(store.getMemory(dup)).toBeNull();
+    // FTS 同步清理：kept 内容仍可搜到（用 ≥3 字串，FTS5 trigram 阈值）
+    expect(store.searchMemories("偏好暖色", "u1")).toHaveLength(1);
+  });
+
+  it("mergeMemories 空 removeIds / 不可见 keep → 拒绝且不改数据", () => {
+    const keep = store.createMemory({ kind: "note", content: "私有记忆", tags: "a" }, "u1");
+    expect(store.mergeMemories(keep, [], "u1").kept).toBeNull();
+    store.createMemory({ kind: "note", content: "他人记忆" }, "u2");
+    // keep 不可见（他人）
+    const other = store.createMemory({ kind: "note", content: "他人待并", tags: "x" }, "u2");
+    expect(store.mergeMemories(keep, [other], "u1").kept).toBeNull();
+    // 数据未被改动
+    expect(store.getMemory(keep)!.tags).toBe("a");
+    expect(store.getMemory(other)).not.toBeNull();
+  });
+});
+
 describe("记忆对话注入（M42 store searchMemoriesFor）", () => {
   beforeEach(() => {
     resetTables();

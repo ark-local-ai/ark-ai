@@ -10,7 +10,7 @@ import type { FastifyInstance } from "fastify";
 import { currentUser } from "./auth";
 import {
   createMemory, listMemories, getMemory, updateMemory, deleteMemory, searchMemories,
-  deleteMemories, findDuplicateMemories,
+  deleteMemories, findDuplicateMemories, mergeMemories,
 } from "../db/store";
 
 export async function memoryRoutes(app: FastifyInstance) {
@@ -65,5 +65,15 @@ export async function memoryRoutes(app: FastifyInstance) {
     if (!ids.length) return reply.code(400).send({ error: "请选择要删除的记忆" });
     const n = deleteMemories(ids, currentUser(req)?.id);
     return reply.send({ ok: true, deleted: n });
+  });
+
+  // M59：一键合并重复记忆——把 removeIds 的 tags 并入 keepId 后再删除 removeIds
+  app.post<{ Body: { keepId?: string; removeIds?: string[] } }>("/merge", async (req, reply) => {
+    const keepId = (req.body?.keepId ?? "").trim();
+    const removeIds = Array.isArray(req.body?.removeIds) ? req.body.removeIds.filter(Boolean) : [];
+    if (!keepId || !removeIds.length) return reply.code(400).send({ error: "缺少要合并的记忆" });
+    const r = mergeMemories(keepId, removeIds, currentUser(req)?.id);
+    if (!r.kept) return reply.code(404).send({ error: "记忆不存在或不可见" });
+    return reply.send({ ok: true, kept: r.kept, removed: r.removed });
   });
 }

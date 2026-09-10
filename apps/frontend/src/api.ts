@@ -1014,6 +1014,16 @@ export async function findDuplicateMemories(kind?: string): Promise<DuplicateGro
   return res.json();
 }
 
+export async function mergeMemories(keepId: string, removeIds: string[]): Promise<{ kept: string; removed: string[] }> {
+  const res = await fetch(`${BASE}/api/memories/merge`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ keepId, removeIds }),
+  });
+  if (!res.ok) throw new Error(`合并记忆失败: ${res.status}`);
+  return res.json();
+}
+
 // ---- M45 IM 消息桥 ----
 export interface ImSettingsDto {
   enabled: boolean;

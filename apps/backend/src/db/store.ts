@@ -1034,6 +1034,41 @@ export function findDuplicateMemories(userId?: string, kind?: string): {
   return groups;
 }
 
+/**
+ * M59 一键合并重复记忆：把 removeIds 的 tags 并入 keepId（去重、逗号分隔），然后删除被合并的记忆。
+ * 只允许操作当前用户可见的记忆（user_id = 本人 或全局），杜绝越权合并/删除他人记忆。
+ * 返回实际保留与被删的 id；keep 或任一 remove 不可见则整组拒绝（保持幂等、不留半删状态）。
+ */
+export function mergeMemories(
+  keepId: string,
+  removeIds: string[],
+  userId?: string | null,
+): { kept: string | null; removed: string[] } {
+  const visible = (id: string) =>
+    !!db.prepare(`SELECT 1 FROM memories WHERE id = ? AND (user_id = ? OR user_id IS NULL)`).get(id, userId?.toString() ?? null);
+  if (!visible(keepId) || !removeIds.length) return { kept: null, removed: [] };
+  for (const id of removeIds) {
+    if (!visible(id)) return { kept: null, removed: [] };
+  }
+  const keep = getMemory(keepId);
+  if (!keep) return { kept: null, removed: [] };
+
+  // 汇总被合并记忆的 tags 并入 keep（按逗号拆开去重）
+  const tagSet = new Set(
+    (keep.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean),
+  );
+  for (const id of removeIds) {
+    const m = getMemory(id);
+    if (!m || !m.tags) continue;
+    for (const t of m.tags.split(",").map((x) => x.trim()).filter(Boolean)) tagSet.add(t);
+  }
+  const mergedTags = [...tagSet].join(",");
+
+  db.prepare(`UPDATE memories SET tags = ? WHERE id = ?`).run(mergedTags || null, keepId);
+  deleteMemories(removeIds, userId);
+  return { kept: keepId, removed: removeIds };
+}
+
 /** 记忆全文检索（FTS5 trigram，≥3 字子串；多用户隔离） */
 export function searchMemories(q: string, userId?: string): MemoryRow[] {
   const term = (q ?? "").trim();

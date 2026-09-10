@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { IconSearch, IconPlus, IconTrash, IconNote, IconCheck, IconX, IconBubble } from "../components/icons";
 import {
   listMemories, searchMemories, createMemory, updateMemory, deleteMemory,
-  batchDeleteMemories, findDuplicateMemories,
+  batchDeleteMemories, findDuplicateMemories, mergeMemories,
   type MemoryDto, type DuplicateGroupDto,
 } from "../api";
 
@@ -96,6 +96,26 @@ export default function Memories() {
   };
   const dupTotalDuplicate = dups.reduce((n, g) => n + g.duplicates.length, 0);
 
+  // M59：一键合并重复记忆——把一组重复的并入 canonical（tags 合并后删掉其余），或一键合并全部组
+  const [merging, setMerging] = useState<Record<string, boolean>>({});
+  const doMerge = async (keepId: string, removeIds: string[]) => {
+    setMerging((m) => ({ ...m, [keepId]: true }));
+    try {
+      await mergeMemories(keepId, removeIds);
+      // 合并后重查，去重复查面板
+      const g = await findDuplicateMemories(kind ?? undefined);
+      setDups(g);
+      clearSel();
+      load();
+    } catch { /* 忽略 */ } finally {
+      setMerging((m) => ({ ...m, [keepId]: false }));
+    }
+  };
+  const mergeGroup = (g: DuplicateGroupDto) => doMerge(g.canonical.id, g.duplicates.map((d) => d.id));
+  const mergeAllDups = () => {
+    for (const g of dups) void doMerge(g.canonical.id, g.duplicates.map((d) => d.id));
+  };
+
   const showAll = q.trim() !== "";
 
   return (
@@ -137,6 +157,9 @@ export default function Memories() {
                 <>
                   <button className="btn soft sm" onClick={() => selectAllDups(true)}>全选重复</button>
                   <button className="btn soft sm" onClick={() => selectAllDups(false)}>全选整组</button>
+                  <button className="btn primary sm" onClick={mergeAllDups} disabled={Object.values(merging).some(Boolean)}>
+                    {Object.values(merging).some(Boolean) ? "合并中…" : "合并全部"}
+                  </button>
                 </>
               )}
               <button className="icon-btn" title="关闭" onClick={() => setDupInv(false)}><IconX size={14} /></button>
@@ -147,7 +170,11 @@ export default function Memories() {
               <div className="mem-dup-main">
                 <span className="pill note"><IconCheck size={11} /> 保留</span>
                 <span className="mem-dup-content">{g.canonical.content}</span>
-                <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-3)" }}>{g.canonical.created}</span>
+                <button className="btn primary sm" onClick={() => mergeGroup(g)} disabled={merging[g.canonical.id]}
+                  title="把重复的并进这一条（合并标签后删除其余）">
+                  {merging[g.canonical.id] ? "合并中…" : "合并此组"}
+                </button>
+                <span style={{ fontSize: 11, color: "var(--text-3)", marginLeft: "auto" }}>{g.canonical.created}</span>
               </div>
               {g.duplicates.map((d) => (
                 <div key={d.id} className="mem-dup-sub" onClick={() => toggle(d.id)}>

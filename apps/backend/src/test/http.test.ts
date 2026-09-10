@@ -495,3 +495,27 @@ describe("对话记忆沉淀 API（M58）", () => {
     expect(empty.statusCode).toBe(404);
   });
 });
+
+describe("记忆合并 API（M59）", () => {
+  it("POST /api/memories/merge 合并 tags 删重复；缺参 400；不可见 404", async () => {
+    const keep = store.createMemory({ kind: "note", content: "偏好暖色", tags: "界面" });
+    const dup = store.createMemory({ kind: "note", content: "偏好暖色", tags: "设计" });
+
+    const ok = await post("/api/memories/merge", { keepId: keep, removeIds: [dup] });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({ ok: true, kept: keep, removed: [dup] });
+    // 数据落库校验
+    const g = store.getMemory(keep)!;
+    const tags = (g.tags ?? "").split(",").filter(Boolean);
+    expect(tags).toHaveLength(2);
+    expect(tags).toContain("界面");
+    expect(tags).toContain("设计");
+    expect(store.getMemory(dup)).toBeNull();
+
+    const noarg = await post("/api/memories/merge", { keepId: "", removeIds: [] });
+    expect(noarg.statusCode).toBe(400);
+
+    const missing = await post("/api/memories/merge", { keepId: "nope", removeIds: [keep] });
+    expect(missing.statusCode).toBe(404);
+  });
+});
