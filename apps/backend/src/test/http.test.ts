@@ -457,3 +457,41 @@ describe("记忆批量整理 API（M57）", () => {
     expect((faktOnly.json() as unknown[]).length).toBe(0);
   });
 });
+
+describe("对话记忆沉淀 API（M58）", () => {
+  it("POST /:id/distill/save 保存勾选的候选记忆，空 facts 400", async () => {
+    const sid = store.createChatSession("M58 会话", "u1");
+    store.appendChatMessage(sid, "user", "我喜欢简洁的深色 PPT");
+    store.appendChatMessage(sid, "assistant", "好的");
+
+    const ok = await post(`/api/chat/sessions/${sid}/distill/save`, {
+      facts: [{ kind: "preference", content: "喜欢简洁的深色 PPT" }],
+    });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json() as { ok: boolean; saved: unknown[] };
+    expect(body.ok).toBe(true);
+    expect(body.saved.length).toBe(1);
+    // 落库后可被检索到
+    expect(store.searchMemories("深色 PPT", "u1").length).toBeGreaterThan(0);
+
+    const empty = await post(`/api/chat/sessions/${sid}/distill/save`, { facts: [] });
+    expect(empty.statusCode).toBe(400);
+  });
+
+  it("POST /:id/distill 返回候选（无模型走启发式，空会话 404）", async () => {
+    const sid = store.createChatSession("M58 提取", "u1");
+    store.appendChatMessage(sid, "user", "我平时偏好暖色调界面，不要用冷蓝色。");
+    store.appendChatMessage(sid, "assistant", "收到");
+
+    const r = await post(`/api/chat/sessions/${sid}/distill`, {});
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { candidates: { kind: string; content: string }[] };
+    expect(Array.isArray(body.candidates)).toBe(true);
+    // 作者：启发式会抽取带「偏好」信号的用户陈述
+    expect(body.candidates.some((c) => c.content.includes("暖色调"))).toBe(true);
+
+    const emptySid = store.createChatSession("空会话", "u1");
+    const empty = await post(`/api/chat/sessions/${emptySid}/distill`, {});
+    expect(empty.statusCode).toBe(404);
+  });
+});

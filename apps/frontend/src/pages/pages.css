@@ -173,6 +173,19 @@
 .cst-del:hover { color: var(--danger); }
 .chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
+/* M58：离开会话时的记忆沉淀确认面板 */
+.chat-overlay { position: fixed; inset: 0; background: rgba(40, 33, 24, 0.32); z-index: 90; backdrop-filter: blur(1px); }
+.chat-distill { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 91;
+  width: min(460px, calc(100vw - 32px)); padding: 16px 18px; box-shadow: 0 16px 40px rgba(60, 45, 25, 0.18); }
+.chat-distill-h { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.chat-distill-tip { font-size: 12px; color: var(--text-2); line-height: 1.6; margin: 0 0 12px; }
+.chat-distill-list { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow: auto; margin-bottom: 12px; }
+.chat-distill-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 10px; cursor: pointer; transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out); }
+.chat-distill-item:hover { border-color: var(--brand); background: var(--surface-2); }
+.chat-distill-content { flex: 1; font-size: 12.8px; color: var(--text-1); line-height: 1.5; white-space: pre-wrap; }
+
+
 /* 工作空间 · 新建（内联输入） */
 .space-item.add:hover { background: var(--brand-soft); }
 .space-new { padding: 4px 2px; display: flex; flex-direction: column; gap: 6px; }

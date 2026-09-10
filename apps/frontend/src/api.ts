@@ -1035,3 +1035,35 @@ export async function updateImSettings(body: { enabled?: boolean; name?: string;
   if (!res.ok) throw new Error(`更新 IM 桥配置失败: ${res.status}`);
   return res.json();
 }
+
+// ---- M58 对话记忆自动沉淀 ----
+export interface DistillCandidate {
+  kind: string;
+  content: string;
+}
+export interface DistillResultDto {
+  candidates: DistillCandidate[];
+  viaLLM: boolean;
+  error?: string;
+}
+
+export async function distillSession(sessionId: string): Promise<DistillResultDto> {
+  const res = await fetch(`${BASE}/api/chat/sessions/${encodeURIComponent(sessionId)}/distill`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`提炼记忆失败: ${res.status}`);
+  return res.json();
+}
+
+export async function saveDistilledFacts(
+  sessionId: string, facts: DistillCandidate[],
+): Promise<{ ok: boolean; saved: { id: string; kind: string; content: string }[] }> {
+  const res = await fetch(`${BASE}/api/chat/sessions/${encodeURIComponent(sessionId)}/distill/save`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ facts }),
+  });
+  if (!res.ok) throw new Error(`保存记忆失败: ${res.status}`);
+  return res.json();
+}

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { IconSend, IconTrash, IconNote } from "../components/icons";
+import { IconSend, IconTrash, IconNote, IconCheck, IconX } from "../components/icons";
 import {
   sendChat, listChatSessions, getChatMessages, deleteChatSession, subscribeTask, workspaceUrl,
-  type ChatMsg, type ChatSessionDto,
+  distillSession, saveDistilledFacts,
+  type ChatMsg, type ChatSessionDto, type DistillCandidate,
 } from "../api";
 
 interface Msg {
@@ -34,6 +35,11 @@ export default function Chat() {
   // M55：/记忆 检索结果芯片（点击引用进输入框）
   const [memResults, setMemResults] = useState<{ id: string; kind: string; content: string }[]>([]);
   const [memKeyword, setMemKeyword] = useState("");
+  // M58：离开会话时的「记忆沉淀」确认面板
+  const [distill, setDistill] = useState<{ candidates: DistillCandidate[]; viaLLM: boolean; error?: string } | null>(null);
+  const [distillChecked, setDistillChecked] = useState<Set<number>>(new Set());
+  const [distillBusy, setDistillBusy] = useState(false);
+  const distillCtxRef = useRef<{ sessionId: string; action: () => void } | null>(null);
   const historyRef = useRef<ChatMsg[]>([]);
 
   const loadSessions = () => {
@@ -53,21 +59,72 @@ export default function Chat() {
       .catch(() => {});
   }, [sessParam]);
 
+  // M58：离开当前会话前，先尝试沉淀记忆——有当前会话就弹确认面板，否则直接执行
+  const requestLeave = (action: () => void) => {
+    if (!sessionId || busy) { action(); return; }
+    setDistillBusy(true);
+    distillSession(sessionId)
+      .then((r) => {
+        setDistillBusy(false);
+        if (r.candidates && r.candidates.length) {
+          distillCtxRef.current = { sessionId, action };
+          setDistill({ candidates: r.candidates, viaLLM: r.viaLLM, error: r.error });
+          setDistillChecked(new Set(r.candidates.map((_, i) => i)));
+        } else {
+          action();
+        }
+      })
+      .catch(() => { setDistillBusy(false); action(); });
+  };
+
   const newChat = () => {
-    historyRef.current = [];
-    setMsgs(WELCOME);
-    setSessionId(null);
-    setV("");
-    nav("/app/chat");
+    const doNew = () => {
+      historyRef.current = [];
+      setMsgs(WELCOME);
+      setSessionId(null);
+      setV("");
+      nav("/app/chat");
+    };
+    requestLeave(doNew);
   };
 
   const openSession = async (id: string) => {
-    nav(`/app/chat?sess=${id}`);
+    if (id === sessionId) return;
+    requestLeave(() => nav(`/app/chat?sess=${id}`));
+  };
+
+  // 确认面板：默认全选，用户可勾掉不想存的
+  const toggleDistill = (i: number) => {
+    setDistillChecked((prev) => {
+      const n = new Set(prev);
+      if (n.has(i)) n.delete(i); else n.add(i);
+      return n;
+    });
+  };
+
+  const confirmDistill = async () => {
+    const ctx = distillCtxRef.current;
+    if (!ctx) { setDistill(null); return; }
+    const chosen = (distill?.candidates ?? []).filter((_, i) => distillChecked.has(i));
+    setDistillBusy(true);
+    try {
+      if (chosen.length) await saveDistilledFacts(ctx.sessionId, chosen);
+      setDistill(null);
+      distillCtxRef.current = null;
+      ctx.action();
+    } catch { setDistillBusy(false); }
+  };
+
+  const skipDistill = () => {
+    const ctx = distillCtxRef.current;
+    setDistill(null);
+    distillCtxRef.current = null;
+    ctx?.action();
   };
 
   const delSession = async (id: string) => {
     await deleteChatSession(id).catch(() => {});
-    if (id === sessionId) newChat();
+    if (id === sessionId) { historyRef.current = []; setMsgs(WELCOME); setSessionId(null); setV(""); nav("/app/chat"); }
     loadSessions();
   };
 
@@ -163,6 +220,40 @@ export default function Chat() {
 
   return (
     <div className="page chat-page">
+      {/* M58：离开会话前的记忆沉淀确认面板 */}
+      {distill && (
+        <>
+          <div className="chat-overlay" onClick={distillBusy ? undefined : skipDistill} />
+          <div className="chat-distill card">
+            <div className="chat-distill-h">
+              <b>从这段对话沉淀记忆？</b>
+              <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                {distill.viaLLM ? "由模型提炼" : "启发式提炼"}{distill.error ? " · 已降级" : ""}
+              </span>
+              <button className="icon-btn" style={{ marginLeft: "auto" }} onClick={skipDistill} title="关闭"><IconX size={14} /></button>
+            </div>
+            <p className="chat-distill-tip">要离开当前会话了。下面是从对话里提炼出的、可能值得长期记住的信息，勾选需要记住的，或直接跳过。</p>
+            <div className="chat-distill-list">
+              {distill.candidates.map((c, i) => (
+                <div key={i} className="chat-distill-item" onClick={() => !distillBusy && toggleDistill(i)}>
+                  <span className={`chk${distillChecked.has(i) ? " on" : ""}`}>{distillChecked.has(i) && <IconCheck size={11} />}</span>
+                  <span className={`pill ${c.kind}`}>{c.kind === "fact" ? "事实" : c.kind === "preference" ? "偏好" : "笔记"}</span>
+                  <span className="chat-distill-content">{c.content}</span>
+                </div>
+              ))}
+            </div>
+            <div className="chat-distill-h">
+              <span style={{ fontSize: 12, color: "var(--text-3)" }}>已选 {distillChecked.size} 条</span>
+              <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8 }}>
+                <button className="btn soft sm" onClick={skipDistill} disabled={distillBusy}>跳过</button>
+                <button className="btn primary sm" onClick={confirmDistill} disabled={distillBusy}>
+                  {distillBusy ? "保存中…" : `记住所选 ${distillChecked.size ? `(${distillChecked.size})` : ""}`}
+                </button>
+              </span>
+            </div>
+          </div>
+        </>
+      )}
       <div className="chat-wrap">
         {/* 会话列表（M19 持久化） */}
         <div className="chat-sess">
