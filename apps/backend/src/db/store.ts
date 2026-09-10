@@ -75,17 +75,42 @@ if (!taskCols.some((c) => c.name === "created_ts")) {
   db.exec(`UPDATE tasks SET created_ts = ${Date.now()}`);
 }
 
+// ---- 迁移：任务参考资料（tasks.refs，M64 方向二）----
+// refs 存「送给任务」的参考资料（AttachmentRef[] 的 JSON 序列化）——断点续跑/进程重启后
+// resumeTask 需要重建参考资料注入多 Agent 上下文，否则参考资料会随重启丢失。
+if (!taskCols.some((c) => c.name === "refs")) {
+  db.exec(`ALTER TABLE tasks ADD COLUMN refs TEXT`);
+}
+
 // ---- 任务写 / 读（node:sqlite 同步 API，prepare().run() / .get() / .all()）----
-export function insertTask(task: Task, userId?: string): void {
+export function insertTask(task: Task, userId?: string, refs?: { title?: string; url?: string; text: string }[]): void {
   db.prepare(
-    `INSERT INTO tasks (id, title, prompt, status, model, expert, skills, workspace, checks, timeline, created, created_ts, archived, user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tasks (id, title, prompt, status, model, expert, skills, workspace, checks, timeline, created, created_ts, archived, user_id, refs)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id, task.title, task.prompt, task.status, task.model, task.expert,
     JSON.stringify(task.skills), task.workspace,
     JSON.stringify(task.checks), JSON.stringify(task.timeline), task.created,
     Date.now(), task.archived ? 1 : 0, userId ?? null,
+    refs && refs.length ? JSON.stringify(refs) : null,
   );
+}
+
+/** M64：读取一条任务的参考资料（AttachmentRef[]），无则返回空数组。 */
+export function getTaskRefs(id: string): { title?: string; url?: string; text: string }[] {
+  const r = db.prepare(`SELECT refs FROM tasks WHERE id = ?`).get(id) as { refs: string | null } | undefined;
+  if (!r?.refs) return [];
+  try {
+    const arr = JSON.parse(r.refs);
+    return Array.isArray(arr) ? arr.filter((x: { text?: string }) => !!x?.text) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** M64：为已存在的任务写入参考资料（用于入队前异步补存/修复）。 */
+export function updateTaskRefs(id: string, refs: { title?: string; url?: string; text: string }[]): void {
+  db.prepare(`UPDATE tasks SET refs = ? WHERE id = ?`).run(refs && refs.length ? JSON.stringify(refs) : null, id);
 }
 
 export function insertStep(taskId: string, seq: number, title: string): number {
@@ -1092,9 +1117,10 @@ export function mergeMemories(
     }
     // 继承最早一个有来源的被合并记忆的溯源（keep 无来源时）
     if (!source && m.source) source = m.source;
-    // 过期取更早（更保守）
-    if (expiresAt === null || (m.expires_at !== null && m.expires_at < expiresAt)) {
-      expiresAt = m.expires_at;
+    // 过期取更早（更保守）：null/undefined 视为「无时效=长期」，不参与取早；有值的才写入（若 keep 无时效或更晚）
+    const exp = m.expires_at ?? null;
+    if (exp !== null && (expiresAt === null || exp < expiresAt)) {
+      expiresAt = exp;
     }
   }
   const mergedTags = [...tagSet].join(",");

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
     resetTask: vi.fn(),
     insertTask: vi.fn(),
     insertStep: vi.fn(),
+    getTaskRefs: vi.fn(() => []),
     getActiveSpace: vi.fn(() => undefined),
     defaultTool: { run: vi.fn(() => ({ title: "t", body: ["b"] })) },
     runContentPipeline: vi.fn(async () => ({
@@ -44,6 +45,7 @@ vi.mock("../db/store.js", () => ({
   insertArtifact: mocks.insertArtifact,
   getTask: mocks.getTask,
   getActiveSpace: mocks.getActiveSpace,
+  getTaskRefs: mocks.getTaskRefs,
 }));
 
 import { resumeTask, runTask } from "./orchestrator.js";
@@ -113,6 +115,32 @@ describe("resumeTask 断点续跑（M31）", () => {
     // 无断点 → 走全新路径：重置 + 按 plan 插入步骤
     expect(mocks.resetTask).toHaveBeenCalled();
     expect(mocks.insertStep).toHaveBeenCalled();
+  });
+
+  it("resumeTask 重建并传递持久化的参考资料（M64）", async () => {
+    mocks.getTask.mockReturnValue(makeExisting([
+      { id: 10, title: "分析需求", status: "done", note: JSON.stringify({ title: "分析需求", paragraphs: ["要点A"] }) },
+      { id: 11, title: "搜集资料", status: "pending", note: null },
+    ]));
+    // 参考资料此前随 insertTask 落库，续跑时从库重建
+    mocks.getTaskRefs.mockReturnValue([{ title: "背景", url: "https://x.example", text: "参考正文" }]);
+
+    await resumeTask("t1", "做一份报告", "user1");
+    await sleep(5);
+
+    // runContentPipeline 第 6 参（refs）应带上重建的参考资料
+    const pipelineCalls = mocks.runContentPipeline.mock.calls;
+    expect(pipelineCalls.length).toBeGreaterThan(0);
+    const lastRefs = pipelineCalls[pipelineCalls.length - 1][5];
+    expect(Array.isArray(lastRefs)).toBe(true);
+    expect(lastRefs[0]).toMatchObject({ title: "背景", url: "https://x.example", text: "参考正文" });
+
+    // 无持久化 refs 时传空数组（不 undefined）
+    mocks.getTaskRefs.mockReturnValue([]);
+    await resumeTask("t2", "x", undefined);
+    await sleep(5);
+    const later = mocks.runContentPipeline.mock.calls;
+    expect(later[later.length - 1][5]).toEqual([]);
   });
 });
 

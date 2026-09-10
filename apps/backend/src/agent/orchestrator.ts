@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Task, TaskStep, Artifact } from "../types";
 import {
   insertTask, insertStep, updateStepStatus, updateTaskStatus,
-  insertArtifact, getTask, updateTaskChecksAndTimeline, getActiveSpace, resetTask,
+  insertArtifact, getTask, updateTaskChecksAndTimeline, getActiveSpace, resetTask, getTaskRefs,
 } from "../db/store";
 import { publish } from "./events";
 import { planTask } from "./planner";
@@ -191,8 +191,8 @@ export async function runTask(id: string, prompt: string, userId?: string, opts?
 
   // 幂等复位：重试同一 id 时先清掉上次残留的 steps/artifacts/主行，再写新快照
   resetTask(id);
-  // 持久化任务 + 步骤
-  insertTask(task, userId);
+  // 持久化任务 + 步骤（M64：把 refs 参考资料一并落库，断点续跑时才不丢）
+  insertTask(task, userId, opts?.refs);
   const stepIds: number[] = [];
   plan.forEach((p, i) => stepIds.push(insertStep(id, i, p)));
   task.steps = plan.map((title, i) => ({ id: stepIds[i], title, status: "pending" }));
@@ -221,6 +221,8 @@ export async function resumeTask(id: string, prompt: string, userId?: string): P
   const storedTitles: string[] = [];
   let startIdx = 0;
   const sections: StepContent[] = [];
+  // M64：断点续跑时重建「送给任务」的参考资料（此前已随 insertTask 落库），不因重启/续跑丢失
+  const refs: AttachmentRef[] = getTaskRefs(id);
 
   if (existing && stepIds.length > 0) {
     // 沿用已持久化步骤（其标题即计划），断点 = 第一个非 done 的步骤下标
@@ -234,8 +236,8 @@ export async function resumeTask(id: string, prompt: string, userId?: string): P
     });
     log.info({ userId, resumeFromStep: startIdx, totalSteps: storedTitles.length }, "task resumed from checkpoint");
   } else {
-    // 无已落步骤：没跑过就正常全新跑
-    return runTask(id, prompt, userId);
+    // 无已落步骤：没跑过就正常全新跑（M64：仍带上已持久化的 refs，避免全新跑时丢参考资料）
+    return runTask(id, prompt, userId, refs.length ? { refs } : undefined);
   }
 
   const task: Task = {
@@ -258,12 +260,12 @@ export async function resumeTask(id: string, prompt: string, userId?: string): P
   if (startIdx === stepIds.length) {
     // 所有步都 done 但任务没置 done（进程崩在收尾）：无需重跑步骤，直接重新生成交付
     const plan = storedTitles;
-    await runPlanSteps({ id, userId, plan, stepIds, kind: detectKind(prompt), startIdx: stepIds.length - 1, sections, task });
+    await runPlanSteps({ id, userId, plan, stepIds, kind: detectKind(prompt), startIdx: stepIds.length - 1, sections, task, refs });
   } else {
     updateTaskStatus(id, "running");
     task.status = "running";
     publish({ type: "step", taskId: id, data: { stepId: stepIds[Math.max(0, startIdx)], status: "running" } });
-    await runPlanSteps({ id, userId, plan: storedTitles, stepIds, kind: detectKind(prompt), startIdx, sections, task });
+    await runPlanSteps({ id, userId, plan: storedTitles, stepIds, kind: detectKind(prompt), startIdx, sections, task, refs });
   }
 
   return finishTask(id, task);

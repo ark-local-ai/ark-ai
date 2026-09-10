@@ -61,6 +61,22 @@ describe("tasks", () => {
     expect(store.getTask("nope")).toBeNull();
   });
 
+  it("insertTask 落库 refs 参考资料；getTaskRefs 读回；updateTaskRefs 覆写（M64）", () => {
+    const t = makeTask({ id: "refs1" });
+    store.insertTask(t, "u1", [{ title: "背景", url: "https://x.example", text: "正文A" }, { title: "补充", text: "正文B" }]);
+    // 读回：两条有效 refs
+    expect(store.getTaskRefs("refs1")).toHaveLength(2);
+    expect(store.getTaskRefs("refs1")[0]).toMatchObject({ title: "背景", url: "https://x.example", text: "正文A" });
+    // 覆写为空（清掉）
+    store.updateTaskRefs("refs1", []);
+    expect(store.getTaskRefs("refs1")).toEqual([]);
+    // 覆写为新 refs
+    store.updateTaskRefs("refs1", [{ text: "仅正文" }]);
+    expect(store.getTaskRefs("refs1")).toEqual([{ text: "仅正文" }]);
+    // 不存在 id → 空数组
+    expect(store.getTaskRefs("nope")).toEqual([]);
+  });
+
   it("步骤与产物增删", () => {
     store.insertTask(makeTask({ id: "x" }), undefined);
     const sid = store.insertStep("x", 0, "第一步");
