@@ -428,6 +428,57 @@ describe("记忆系统（M41 store）", () => {
   });
 });
 
+describe("记忆批量整理（M57 store）", () => {
+  beforeEach(() => {
+    resetTables();
+  });
+
+  it("deleteMemories 批量删除只删本用户可见的记忆", () => {
+    const a = store.createMemory({ kind: "note", content: "甲" }, "u1");
+    const b = store.createMemory({ kind: "fact", content: "乙" }, "u1");
+    store.createMemory({ kind: "note", content: "丙（他人）" }, "u2");
+    // 传入他人 id 应被隔离过滤，不误删
+    const deleted = store.deleteMemories([a, b, "notexist"], "u1");
+    expect(deleted).toBe(2);
+    expect(store.getMemory(a)).toBeNull();
+    expect(store.getMemory(b)).toBeNull();
+    expect(store.listMemories(undefined)).toHaveLength(0);
+  });
+
+  it("deleteMemories 空参返回 0；FTS 同步清理", () => {
+    expect(store.deleteMemories([], "u1")).toBe(0);
+    const a = store.createMemory({ kind: "note", content: "全文可搜 暖茶褐" }, "u1");
+    store.deleteMemories([a], "u1");
+    expect(store.searchMemories("暖茶褐", "u1")).toHaveLength(0);
+  });
+
+  it("findDuplicateMemories 归一化后归组，保留最早、其余为重复", () => {
+    const first = store.createMemory({ kind: "note", content: "用户喜欢暖茶褐界面。" }, "u1");
+    store.createMemory({ kind: "fact", content: "用户喜欢暖茶褐界面！" }, "u1");
+    store.createMemory({ kind: "note", content: "完全不同的另一条" }, "u1");
+    const groups = store.findDuplicateMemories("u1");
+    expect(groups).toHaveLength(1);
+    expect(groups[0].canonical.id).toBe(first);
+    expect(groups[0].duplicates).toHaveLength(1);
+  });
+
+  it("findDuplicateMemories 无重复返回空；?kind 可仅对某类扫描", () => {
+    store.createMemory({ kind: "note", content: "唯一一条" }, "u1");
+    expect(store.findDuplicateMemories("u1")).toHaveLength(0);
+  });
+
+  it("findDuplicateMemories 跨 kind 同内容也视为重复，kind 过滤只扫该类", () => {
+    store.createMemory({ kind: "fact", content: "重复内容" }, "u1");
+    store.createMemory({ kind: "preference", content: "重复内容" }, "u1");
+    // 不指定 kind：跨类同内容归为一组（1 条重复）
+    const all = store.findDuplicateMemories("u1");
+    expect(all).toHaveLength(1);
+    expect(all[0].duplicates).toHaveLength(1);
+    // 只扫 fact：该类仅 1 条，无重复
+    expect(store.findDuplicateMemories("u1", "fact")).toHaveLength(0);
+  });
+});
+
 describe("记忆对话注入（M42 store searchMemoriesFor）", () => {
   beforeEach(() => {
     resetTables();

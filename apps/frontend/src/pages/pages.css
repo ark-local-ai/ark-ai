@@ -304,6 +304,31 @@
 .mem-flash { background: var(--brand-soft); color: var(--brand); border: 1px solid var(--brand); font-size: 11.5px; animation: memIn 0.25s ease; }
 @keyframes memIn { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 
+/* ===== M57 记忆暖卡 + 批量整理 ===== */
+/* 暖卡：稍暖的底色 + 顶部分色条，让记忆卡更有「待在暖环境里」的感觉 */
+.mem-card { position: relative; border-radius: 14px; background: linear-gradient(180deg, #fffdf8 0%, var(--surface) 50%); overflow: hidden; transition: border-color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out), transform 0.12s var(--ease-out); }
+.mem-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--brand-soft); }
+.mem-card:hover { border-color: var(--brand); box-shadow: 0 4px 14px rgba(185, 139, 78, 0.12); }
+.mem-card.picking { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.mem-card.picking::before { background: var(--brand); }
+.mem-card-h { position: relative; }
+.mem-content { font-size: 13.5px; position: relative; }
+/* 选择框：暖色圆角小方块，选中时品牌色填充 */
+.chk { width: 17px; height: 17px; border-radius: 5px; border: 1.5px solid var(--line-strong, #d8d2c6); background: var(--surface); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #fff; padding: 0; flex: none; transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out); }
+.chk:hover { border-color: var(--brand); }
+.chk.on { background: var(--brand); border-color: var(--brand); }
+/* 批量删除条 */
+.mem-batch { position: sticky; top: 12px; z-index: 40; display: flex; align-items: center; gap: 8px; padding: 9px 14px; margin: 0 0 14px; background: var(--surface); border: 1px solid var(--brand); border-radius: 12px; box-shadow: 0 4px 14px rgba(185, 139, 78, 0.14); }
+/* 查重面板 */
+.mem-dup { padding: 14px 16px; margin-bottom: 16px; }
+.mem-dup-h { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.mem-dup-group { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.mem-dup-main { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--brand-soft); }
+.mem-dup-sub { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; border-top: 1px dashed var(--line); }
+.mem-dup-sub:hover { background: var(--surface-2); }
+.mem-dup-content { font-size: 13px; color: var(--text-1); line-height: 1.5; flex: 1; white-space: pre-wrap; }
+.mem-dup-sub .mem-dup-content { color: var(--text-2); text-decoration: line-through; text-decoration-color: rgba(185, 99, 78, 0.35); }
+
 /* ===== IM 消息桥页（M45）===== */
 .im-on { background: var(--brand); color: #fff; border-color: var(--brand); }
 .im-field { margin-bottom: 14px; }

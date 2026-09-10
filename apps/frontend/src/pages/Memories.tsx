@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
-import { IconSearch, IconPlus, IconTrash, IconNote } from "../components/icons";
+import { useEffect, useMemo, useState } from "react";
+import { IconSearch, IconPlus, IconTrash, IconNote, IconCheck, IconX, IconBubble } from "../components/icons";
 import {
   listMemories, searchMemories, createMemory, updateMemory, deleteMemory,
-  type MemoryDto,
+  batchDeleteMemories, findDuplicateMemories,
+  type MemoryDto, type DuplicateGroupDto,
 } from "../api";
 
 const KINDS = ["note", "fact", "preference"] as const;
 const KIND_LABEL: Record<string, string> = { note: "笔记", fact: "事实", preference: "偏好" };
-const KIND_COMMON: Record<string, boolean> = { note: true, fact: true, preference: true };
 
 interface Editor { id?: string; kind: string; content: string; tags: string }
+interface Sel { [id: string]: boolean }
 
 export default function Memories() {
   const [list, setList] = useState<MemoryDto[]>([]);
@@ -18,6 +19,12 @@ export default function Memories() {
   const [err, setErr] = useState(false);
   const [editing, setEditing] = useState<Editor | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // M57：批量整理
+  const [sel, setSel] = useState<Sel>({});
+  const [dupInv, setDupInv] = useState(false); // 查重面板是否展开
+  const [dups, setDups] = useState<DuplicateGroupDto[]>([]);
+  const [dupLoading, setDupLoading] = useState(false);
 
   const load = () => {
     listMemories(kind ?? undefined).then(setList).catch(() => setErr(true));
@@ -32,6 +39,28 @@ export default function Memories() {
     return () => clearTimeout(t);
   }, [q]);
 
+  const selectedIds = useMemo(
+    () => list.map((m) => m.id).filter((id) => sel[id]),
+    [list, sel],
+  );
+
+  const toggle = (id: string) => setSel((s) => ({ ...s, [id]: !s[id] }));
+  const clearSel = () => setSel({});
+  const selAll = () => {
+    setSel(Object.fromEntries(list.map((m) => [m.id, true])));
+  };
+
+  const removeOne = async (m: MemoryDto) => {
+    if (!window.confirm("删除这条记忆？")) return;
+    try { await deleteMemory(m.id); load(); } catch { /* 忽略 */ }
+  };
+
+  const delSelected = async () => {
+    if (!selectedIds.length) return;
+    if (!window.confirm(`删除选中的 ${selectedIds.length} 条记忆？此操作不可撤销。`)) return;
+    try { await batchDeleteMemories(selectedIds); clearSel(); load(); } catch { /* 忽略 */ }
+  };
+
   const openNew = () => setEditing({ kind: "note", content: "", tags: "" });
   const openEdit = (m: MemoryDto) => setEditing({ kind: m.kind, content: m.content, tags: m.tags ?? "" });
 
@@ -44,14 +73,28 @@ export default function Memories() {
       else await createMemory(body);
       setEditing(null);
       setQ("");
+      setKind(null);
       load();
     } catch { /* 忽略 */ } finally { setSaving(false); }
   };
 
-  const remove = async (m: MemoryDto) => {
-    if (!window.confirm("删除这条记忆？")) return;
-    try { await deleteMemory(m.id); load(); } catch { /* 忽略 */ }
+  // M57 查重：归一化后相同内容归组，duplicates 一键全选
+  const loadDups = () => {
+    setDupLoading(true);
+    findDuplicateMemories(kind ?? undefined)
+      .then((g) => { setDups(g); setDupInv(true); })
+      .catch(() => { setDups([]); setDupInv(true); })
+      .finally(() => setDupLoading(false));
   };
+  const selectAllDups = (onlyOwn = true) => {
+    const picks: Sel = {};
+    for (const g of dups) {
+      const targets = onlyOwn ? g.duplicates : [g.canonical, ...g.duplicates];
+      for (const m of targets) picks[m.id] = true;
+    }
+    setSel((s) => ({ ...s, ...picks }));
+  };
+  const dupTotalDuplicate = dups.reduce((n, g) => n + g.duplicates.length, 0);
 
   const showAll = q.trim() !== "";
 
@@ -72,12 +115,53 @@ export default function Memories() {
             </button>
           ))}
         </div>
+        <button className="btn soft sm" onClick={loadDups} disabled={dupLoading} title="找出内容重复的记忆">
+          <IconBubble size={13} /> 查重{dupInv && dupTotalDuplicate ? ` (${dupTotalDuplicate})` : ""}
+        </button>
         <button className="btn primary sm" style={{ marginLeft: "auto" }} onClick={openNew}>
           <IconPlus size={13} /> 记一条
         </button>
       </div>
 
       {err && <div style={{ fontSize: 12, color: "var(--warn)", padding: 8 }}>后端未启动，记忆读不到</div>}
+
+      {dupInv && (
+        <div className="mem-dup card">
+          <div className="mem-dup-h">
+            <b>重复记忆</b>
+            <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+              {dups.length ? `${dups.length} 组 · 可合并 ${dupTotalDuplicate} 条重复` : "没有发现重复记忆"}
+            </span>
+            <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
+              {dups.length > 0 && (
+                <>
+                  <button className="btn soft sm" onClick={() => selectAllDups(true)}>全选重复</button>
+                  <button className="btn soft sm" onClick={() => selectAllDups(false)}>全选整组</button>
+                </>
+              )}
+              <button className="icon-btn" title="关闭" onClick={() => setDupInv(false)}><IconX size={14} /></button>
+            </span>
+          </div>
+          {dups.map((g) => (
+            <div key={g.canonical.id} className="mem-dup-group">
+              <div className="mem-dup-main">
+                <span className="pill note"><IconCheck size={11} /> 保留</span>
+                <span className="mem-dup-content">{g.canonical.content}</span>
+                <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-3)" }}>{g.canonical.created}</span>
+              </div>
+              {g.duplicates.map((d) => (
+                <div key={d.id} className="mem-dup-sub" onClick={() => toggle(d.id)}>
+                  <span className={`chk${sel[d.id] ? " on" : ""}`}>
+                    {sel[d.id] && <IconCheck size={11} />}
+                  </span>
+                  <span className="mem-dup-content">{d.content}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-3)" }}>{d.created}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       {editing && (
         <div className="mem-editor card">
@@ -103,22 +187,35 @@ export default function Memories() {
 
       {showAll && <div className="mem-note">搜索结果：{list.length} 条</div>}
 
+      {selectedIds.length > 0 && (
+        <div className="mem-batch">
+          <span className="chk on" style={{ border: "none" }}><IconCheck size={11} /></span>
+          <span style={{ fontSize: 12.5, color: "var(--text-2)" }}>已选 {selectedIds.length} 条</span>
+          <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
+            <button className="btn soft sm" onClick={selAll}>全选当前</button>
+            <button className="btn soft sm" onClick={clearSel}>取消</button>
+            <button className="btn danger sm" onClick={delSelected}><IconTrash size={12} /> 批量删除</button>
+          </span>
+        </div>
+      )}
+
       <div className="mem-grid">
         {list.length === 0 && !err && (
           <div className="empty" style={{ height: 120, justifyContent: "center" }}>还没有记忆。点击「记一条」让方舟记住偏好或事实。</div>
         )}
         {list.map((m) => (
-          <div key={m.id} className="mem-card card">
+          <div key={m.id} className={`mem-card card${sel[m.id] ? " picking" : ""}`}>
             <div className="mem-card-h">
-              <span className={`pill${KIND_COMMON[m.kind] ? ` ${m.kind}` : ""}`}>
-                <IconNote size={11} /> {KIND_LABEL[m.kind] ?? m.kind}
-              </span>
+              <button className="chk" onClick={() => toggle(m.id)}>
+                {sel[m.id] && <IconCheck size={11} />}
+              </button>
+              <span className={`pill ${m.kind}`}><IconNote size={11} /> {KIND_LABEL[m.kind] ?? m.kind}</span>
               <span style={{ fontSize: 11, color: "var(--text-3)", marginLeft: "auto" }}>{m.created}</span>
-              <button className="icon-btn" title="删除" onClick={() => remove(m)}><IconTrash size={13} /></button>
+              <button className="icon-btn" title="删除" onClick={() => removeOne(m)}><IconTrash size={13} /></button>
             </div>
             <div className="mem-content">{m.content}</div>
-            {m.tags && <div className="mem-tags">{m.tags.split(",").map((t, i) => <span key={i} className="pill ghost">#{t}</span>)}</div>}
-            <button className="btn soft sm" style={{ marginTop: 10 }} onClick={() => openEdit(m)}>编辑</button>
+            {m.tags && <div className="mem-tags">{m.tags.split(",").map((t, i) => <span key={i} className="pill ghost">#{t.trim()}</span>)}</div>}
+            <button className="btn soft sm" style={{ marginTop: 10, alignSelf: "flex-start" }} onClick={() => openEdit(m)}>编辑</button>
           </div>
         ))}
       </div>

@@ -991,6 +991,29 @@ export async function deleteMemory(id: string): Promise<void> {
   if (!res.ok) throw new Error(`删除记忆失败: ${res.status}`);
 }
 
+// ---- M57 记忆批量整理 ----
+export interface DuplicateGroupDto {
+  canonical: MemoryDto;
+  duplicates: MemoryDto[];
+}
+
+export async function batchDeleteMemories(ids: string[]): Promise<{ deleted: number }> {
+  const res = await fetch(`${BASE}/api/memories/batch-delete`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error(`批量删除失败: ${res.status}`);
+  return res.json();
+}
+
+export async function findDuplicateMemories(kind?: string): Promise<DuplicateGroupDto[]> {
+  const q = kind ? `?kind=${encodeURIComponent(kind)}` : "";
+  const res = await fetch(`${BASE}/api/memories/duplicates${q}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`查重复记忆失败: ${res.status}`);
+  return res.json();
+}
+
 // ---- M45 IM 消息桥 ----
 export interface ImSettingsDto {
   enabled: boolean;

@@ -10,6 +10,7 @@ import type { FastifyInstance } from "fastify";
 import { currentUser } from "./auth";
 import {
   createMemory, listMemories, getMemory, updateMemory, deleteMemory, searchMemories,
+  deleteMemories, findDuplicateMemories,
 } from "../db/store";
 
 export async function memoryRoutes(app: FastifyInstance) {
@@ -21,6 +22,11 @@ export async function memoryRoutes(app: FastifyInstance) {
   // 全文检索：必须放在 /:id 之前，否则「search」会被当 id 命中
   app.get<{ Querystring: { q?: string } }>("/search", async (req) => {
     return searchMemories(req.query.q ?? "", currentUser(req)?.id);
+  });
+
+  // 查重复：归一化后内容相同的记忆分组成列表（canonical 保留最早，duplicates 待删），?kind= 可只查某类；同样须在 /:id 之前
+  app.get<{ Querystring: { kind?: string } }>("/duplicates", async (req) => {
+    return findDuplicateMemories(currentUser(req)?.id, req.query.kind?.trim() || undefined);
   });
 
   app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {
@@ -51,5 +57,13 @@ export async function memoryRoutes(app: FastifyInstance) {
     const ok = deleteMemory(req.params.id);
     if (!ok) return reply.code(404).send({ error: "记忆不存在" });
     return reply.send({ ok: true });
+  });
+
+  // 批量删除：必须在 /:id 之前注册，否则 POST /batch-delete 会撞进 /:id 无关（POST 无 /:id）
+  app.post<{ Body: { ids?: string[] } }>("/batch-delete", async (req, reply) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
+    if (!ids.length) return reply.code(400).send({ error: "请选择要删除的记忆" });
+    const n = deleteMemories(ids, currentUser(req)?.id);
+    return reply.send({ ok: true, deleted: n });
   });
 }

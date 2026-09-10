@@ -424,3 +424,36 @@ describe("资料加工 API（M54 refine）", () => {
     expect(typeof body.text).toBe("string");
   });
 });
+
+describe("记忆批量整理 API（M57）", () => {
+  it("POST /api/memories/batch-delete 批量删 + 空 ids 400", async () => {
+    // 软门禁下 currentUser 为 undefined，故建无主（user_id NULL）记忆供其可见
+    const a = store.createMemory({ kind: "note", content: "批量甲" });
+    const b = store.createMemory({ kind: "fact", content: "批量乙" });
+
+    const ok = await post("/api/memories/batch-delete", { ids: [a, b, "nope"] });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({ ok: true, deleted: 2 });
+
+    expect(store.getMemory(a)).toBeNull();
+    expect(store.getMemory(b)).toBeNull();
+
+    const empty = await post("/api/memories/batch-delete", { ids: [] });
+    expect(empty.statusCode).toBe(400);
+  });
+
+  it("GET /api/memories/duplicates 归一化归组，?kind 过滤生效", async () => {
+    store.createMemory({ kind: "fact", content: "重复内容暖茶褐" });
+    store.createMemory({ kind: "preference", content: "重复内容暖茶褐" });
+    store.createMemory({ kind: "note", content: "唯一不重复" });
+
+    const all = await get("/api/memories/duplicates");
+    expect(all.statusCode).toBe(200);
+    const groups = all.json() as { canonical: { content: string }; duplicates: unknown[] }[];
+    expect(groups.length).toBe(1);
+    expect(groups[0].duplicates.length).toBe(1);
+
+    const faktOnly = await get("/api/memories/duplicates?kind=fact");
+    expect((faktOnly.json() as unknown[]).length).toBe(0);
+  });
+});

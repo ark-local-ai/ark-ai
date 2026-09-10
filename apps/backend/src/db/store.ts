@@ -990,6 +990,50 @@ export function deleteMemory(id: string): boolean {
   return existed;
 }
 
+/** M57 批量删除记忆（仅删除传入的 id，多用户隔离；返回实际删除条数） */
+export function deleteMemories(ids: string[], userId?: string | null): number {
+  if (!ids.length) return 0;
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = db.prepare(
+    `SELECT id FROM memories WHERE id IN (${placeholders}) AND (user_id = ? OR user_id IS NULL)`,
+  ).all(...ids, userId ?? null) as { id: string }[];
+  const own = rows.map((r) => r.id);
+  if (!own.length) return 0;
+  const p2 = own.map(() => "?").join(",");
+  db.prepare(`DELETE FROM memories WHERE id IN (${p2})`).run(...own);
+  db.prepare(`DELETE FROM memories_fts WHERE id IN (${p2})`).run(...own);
+  return own.length;
+}
+
+/** 归一化记忆内容用于去重：小写 + 折叠连续空白，去掉首尾空格 */
+function normalizeContent(s: string): string {
+  return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[，。！？、；：""''（）【】]/g, "");
+}
+
+/** M57 找出彼此重复的记忆：归一化后完全相同 → canonical 分组（保留最早创建的为准），返回重复组 */
+export function findDuplicateMemories(userId?: string, kind?: string): {
+  canonical: MemoryRow;
+  duplicates: MemoryRow[];
+}[] {
+  const list = listMemories(userId, kind);
+  const map = new Map<string, MemoryRow[]>();
+  for (const m of list) {
+    const key = normalizeContent(m.content);
+    if (!key) continue;
+    const arr = map.get(key) ?? [];
+    arr.push(m);
+    map.set(key, arr);
+  }
+  const groups: { canonical: MemoryRow; duplicates: MemoryRow[] }[] = [];
+  for (const arr of map.values()) {
+    if (arr.length < 2) continue;
+    // 保留创建最早的一条作 canonical，其余当重复
+    const sorted = [...arr].sort((a, b) => (a.created < b.created ? -1 : 1));
+    groups.push({ canonical: sorted[0], duplicates: sorted.slice(1) });
+  }
+  return groups;
+}
+
 /** 记忆全文检索（FTS5 trigram，≥3 字子串；多用户隔离） */
 export function searchMemories(q: string, userId?: string): MemoryRow[] {
   const term = (q ?? "").trim();

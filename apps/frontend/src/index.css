@@ -140,7 +140,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .pill:hover { background: var(--surface-3); }
 .pill.blue { background: var(--brand-soft); color: var(--brand); }
-.pill.blue:hover { background: #e0ebfb; }
+.pill.blue:hover { background: #eae0cd; }
 .pill.ghost { background: var(--surface); border-color: var(--line); }
 .pill.ghost:hover { background: var(--surface-2); }
 
