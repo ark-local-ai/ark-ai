@@ -7,7 +7,7 @@ import {
   ArkLogo, IconCollapse, IconArchive, IconFiles,
 } from "../components/icons";
 import { recentTasks as mockRecentTasks } from "../data/mock";
-import { listTasks, deleteTask, retryTask, setTaskArchived, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, searchChatMessages, subscribeGlobal, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult, type ChatSearchHit } from "../api";
+import { listTasks, deleteTask, retryTask, setTaskArchived, listSpaces, createSpace, setActiveSpace, deleteSpace, searchWorkspace, searchChatMessages, searchMemories, subscribeGlobal, getAuthStatus, type SpaceDto, type AuthUser, type WorkspaceSearchResult, type ChatSearchHit, type MemoryDto } from "../api";
 import AuthModal from "../components/AuthModal";
 
 type Mode = "task" | "space";
@@ -39,6 +39,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const [q, setQ] = useState("");
   const [fileHits, setFileHits] = useState<WorkspaceSearchResult[]>([]);
   const [chatHits, setChatHits] = useState<ChatSearchHit[]>([]);
+  // M56：Cmd+K 同时搜记忆（FTS）——搜索弹板打开且有输入时拉取
+  const [memHits, setMemHits] = useState<MemoryDto[]>([]);
   const [fold, setFold] = useState<Record<string, boolean>>({});
   const [delTarget, setDelTarget] = useState<null | { kind: "task" | "space"; id: string }>(null);
   const [ctxMenu, setCtxMenu] = useState<null | { kind: "task" | "space"; id: string; x: number; y: number; title: string; archived?: boolean }>(null);
@@ -110,8 +112,17 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
     return () => { stale = true; };
   }, [findOpen, kw, q]);
 
+  // M56：Cmd+K 同时搜记忆（FTS5 trigram）——搜索弹板打开且有输入时拉取，点击跳记忆页
+  useEffect(() => {
+    if (!findOpen || !kw) { setMemHits([]); return; }
+    let stale = false;
+    searchMemories(q.trim()).then((h) => { if (!stale) setMemHits(h); }).catch(() => { if (!stale) setMemHits([]); });
+    return () => { stale = true; };
+  }, [findOpen, kw, q]);
+
   const openTask = () => { setFindOpen(false); setMenuOpen(false); nav("/app/task"); };
   const openChatSession = (sessionId: string) => { setFindOpen(false); setMenuOpen(false); nav(`/app/chat?sess=${sessionId}`); };
+  const openMemories = () => { setFindOpen(false); setMenuOpen(false); nav("/app/memories"); };
 
   const taskList = tasks.filter((t) => !t.space || t.space === "默认工作空间");
   const spaceGroups = spaceList.map((s) => ({
@@ -390,6 +401,14 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                       onClick={() => openChatSession(c.sessionId)} />
                   ))}
                   {chatHits.length === 0 && <div className="sb-pop-empty">没有找到匹配对话</div>}
+                </div>
+                <div className="sb-pop-sub">记忆</div>
+                <div className="sb-pop-list">
+                  {memHits.map((m) => (
+                    <Row key={m.id} title={`${m.kind !== "note" ? `[${m.kind}] ` : ""}${m.content}`} time={m.created}
+                      onClick={() => openMemories()} />
+                  ))}
+                  {memHits.length === 0 && <div className="sb-pop-empty">没有找到匹配记忆</div>}
                 </div>
               </>
             )}
