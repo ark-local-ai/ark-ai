@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { IconSearch, IconPlus, IconTrash, IconNote, IconCheck, IconX, IconBubble } from "../components/icons";
+import { useNavigate } from "react-router-dom";
+import { IconSearch, IconPlus, IconTrash, IconNote, IconCheck, IconX, IconBubble, IconLink } from "../components/icons";
 import {
   listMemories, searchMemories, createMemory, updateMemory, deleteMemory,
   batchDeleteMemories, findDuplicateMemories, mergeMemories,
@@ -13,6 +14,7 @@ interface Editor { id?: string; kind: string; content: string; tags: string }
 interface Sel { [id: string]: boolean }
 
 export default function Memories() {
+  const nav = useNavigate();
   const [list, setList] = useState<MemoryDto[]>([]);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<string | null>(null);
@@ -117,6 +119,31 @@ export default function Memories() {
   };
 
   const showAll = q.trim() !== "";
+
+  // M60：解析记忆来源，渲染「查看来源会话」回链（点开该会话）
+  const renderSource = (m: MemoryDto) => {
+    if (!m.source) return null;
+    if (m.source.startsWith("chat-distill:")) {
+      const sid = m.source.slice("chat-distill:".length);
+      return (
+        <button className="link-btn" onClick={() => nav(`/app/chat?sess=${sid}`)} title="打开来源会话">
+          <IconLink size={11} /> 来自对话提炼
+        </button>
+      );
+    }
+    if (m.source.startsWith("chat:")) {
+      const sid = m.source.slice("chat:".length);
+      return (
+        <button className="link-btn" onClick={() => nav(`/app/chat?sess=${sid}`)} title="打开来源会话">
+          <IconLink size={11} /> 来自对话
+        </button>
+      );
+    }
+    if (m.source === "manual") {
+      return <span className="source-tag" title="手动添加">手动</span>;
+    }
+    return <span className="source-tag">{m.source}</span>;
+  };
 
   return (
     <div className="page">
@@ -242,6 +269,7 @@ export default function Memories() {
             </div>
             <div className="mem-content">{m.content}</div>
             {m.tags && <div className="mem-tags">{m.tags.split(",").map((t, i) => <span key={i} className="pill ghost">#{t.trim()}</span>)}</div>}
+            <div className="mem-src">{renderSource(m)}</div>
             <button className="btn soft sm" style={{ marginTop: 10, alignSelf: "flex-start" }} onClick={() => openEdit(m)}>编辑</button>
           </div>
         ))}

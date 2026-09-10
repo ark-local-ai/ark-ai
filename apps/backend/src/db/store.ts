@@ -374,6 +374,14 @@ db.exec(`
   );
 `);
 
+// ---- 迁移：记忆溯源（memories.source，M60）----
+// source 记录这条记忆从哪来：null=手动/未知；"chat:<sessionId>"（/记得 沉淀于某会话）、
+// "chat-distill:<sessionId>"（M58 从某会话提炼）。前端据此渲染「来源」回链，点开原会话。
+const memCols = db.prepare(`PRAGMA table_info(memories)`).all() as { name: string }[];
+if (!memCols.some((c) => c.name === "source")) {
+  db.exec(`ALTER TABLE memories ADD COLUMN source TEXT`);
+}
+
 export interface ChatSessionRow {
   id: string; title: string; created: string; updated: string;
 }
@@ -914,6 +922,8 @@ export interface MemoryRow {
   content: string;
   tags?: string;
   created: string;
+  /** M60 来源溯源：null=手动/未知；"chat:<sid>"（/记得）、"chat-distill:<sid>"（M58 提炼） */
+  source?: string | null;
 }
 
 function syncMemoryFts(id: string, content: string, userId: string | null | undefined): void {
@@ -925,19 +935,20 @@ function syncMemoryFts(id: string, content: string, userId: string | null | unde
   }
 }
 
-/** 创建一条记忆；kind 可为 note/preference/fact 等，tags 逗号分隔。返回 id */
+/** 创建一条记忆；kind 可为 note/preference/fact 等，tags 逗号分隔，source 可选溯源。返回 id */
 export function createMemory(
-  m: { kind?: string; content: string; tags?: string },
+  m: { kind?: string; content: string; tags?: string; source?: string },
   userId?: string,
 ): string {
   const id = Math.random().toString(36).slice(2, 10);
   const kind = m.kind || "note";
   db.prepare(
-    `INSERT INTO memories (id, kind, content, tags, user_id, created)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO memories (id, kind, content, tags, user_id, created, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id, kind, m.content, m.tags ? m.tags : null, userId ?? null,
     new Date().toLocaleString("zh-CN", { hour12: false }),
+    m.source ? m.source : null,
   );
   syncMemoryFts(id, m.content, userId);
   return id;
@@ -952,14 +963,14 @@ export function listMemories(userId?: string, kind?: string): MemoryRow[] {
     params.push(kind);
   }
   return db.prepare(
-    `SELECT id, kind, content, tags, created FROM memories WHERE ${where.join(" AND ")}
+    `SELECT id, kind, content, tags, created, source FROM memories WHERE ${where.join(" AND ")}
      ORDER BY created DESC`,
   ).all(...params) as unknown as MemoryRow[];
 }
 
 export function getMemory(id: string): MemoryRow | null {
   const r = db.prepare(
-    `SELECT id, kind, content, tags, created FROM memories WHERE id = ?`,
+    `SELECT id, kind, content, tags, created, source FROM memories WHERE id = ?`,
   ).get(id) as unknown as MemoryRow | undefined;
   return r ?? null;
 }
@@ -1074,7 +1085,7 @@ export function searchMemories(q: string, userId?: string): MemoryRow[] {
   const term = (q ?? "").trim();
   if (!term) return [];
   return db.prepare(
-    `SELECT m.id, m.kind, m.content, m.tags, m.created
+    `SELECT m.id, m.kind, m.content, m.tags, m.created, m.source
      FROM memories_fts
      JOIN memories m ON m.id = memories_fts.id
      WHERE memories_fts MATCH ? AND (memories_fts.user_id = ? OR memories_fts.user_id IS NULL)
@@ -1103,7 +1114,7 @@ export function searchMemoriesFor(message: string, userId?: string): MemoryRow[]
   const like = unique.map((g) => `content LIKE '%'||?||'%'`).join(" OR ");
   const params: (string | null)[] = [userId ?? null, ...unique];
   return db.prepare(
-    `SELECT id, kind, content, tags, created
+    `SELECT id, kind, content, tags, created, source
      FROM memories
      WHERE (user_id = ? OR user_id IS NULL) AND (${like})
      ORDER BY created DESC LIMIT 10`,

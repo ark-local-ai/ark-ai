@@ -46,7 +46,11 @@ export async function chatSessionRoutes(app: FastifyInstance) {
         const content = (f.content ?? "").trim();
         if (!content) continue;
         const kind = f.kind ?? "note";
-        const id = createMemory({ kind, content }, currentUser(req)?.id);
+        // M60：source 记为 "chat-distill:<sessionId>"，标记这条记忆由 M58 从本会话提炼
+        const id = createMemory(
+          { kind, content, source: `chat-distill:${req.params.id}` },
+          currentUser(req)?.id,
+        );
         out.push({ id, kind, content });
         saved.push({ kind, content });
       }

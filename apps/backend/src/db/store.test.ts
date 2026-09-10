@@ -428,6 +428,36 @@ describe("记忆系统（M41 store）", () => {
   });
 });
 
+describe("记忆来源溯源（M60 store）", () => {
+  it("createMemory 记录 source，三条读取路径都透出", () => {
+    const manual = store.createMemory({ kind: "note", content: "手动一条", source: "manual" }, "u1");
+    const chat = store.createMemory({ kind: "preference", content: "来自对话 偏好暖色", source: "chat:abc123" }, "u1");
+    const distill = store.createMemory({ kind: "fact", content: "来自提炼 团队五人", source: "chat-distill:xyz789" }, "u1");
+    // 未给 source 默认 null
+    const none = store.createMemory({ kind: "note", content: "没标来源" }, "u1");
+
+    expect(store.getMemory(manual)!.source).toBe("manual");
+    expect(store.getMemory(chat)!.source).toBe("chat:abc123");
+    expect(store.getMemory(distill)!.source).toBe("chat-distill:xyz789");
+    expect(store.getMemory(none)!.source).toBeNull();
+
+    // listMemories 透出
+    const list = store.listMemories("u1");
+    expect(list.find((m) => m.id === chat)!.source).toBe("chat:abc123");
+    // searchMemories（FTS）透出
+    const hits = store.searchMemories("来自对话", "u1");
+    expect(hits.find((m) => m.id === chat)!.source).toBe("chat:abc123");
+    // searchMemoriesFor 透出
+    const forHits = store.searchMemoriesFor("用户说偏好暖色", "u1");
+    expect(forHits.find((m) => m.id === chat)!.source).toBe("chat:abc123");
+  });
+
+  it("createMemory 不传 source 时回读为 null（向后兼容）", () => {
+    const id = store.createMemory({ kind: "note", content: "旧式调用" }, "u1");
+    expect(store.getMemory(id)!.source).toBeNull();
+  });
+});
+
 describe("记忆批量整理（M57 store）", () => {
   beforeEach(() => {
     resetTables();

@@ -952,6 +952,8 @@ export interface MemoryDto {
   content: string;
   tags?: string;
   created: string;
+  /** M60 来源溯源：手动=manual；"chat:<sid>"（/记得）；"chat-distill:<sid>"（M58 提炼） */
+  source?: string | null;
 }
 
 export async function listMemories(kind?: string): Promise<MemoryDto[]> {
@@ -967,7 +969,7 @@ export async function searchMemories(q: string): Promise<MemoryDto[]> {
   return res.json();
 }
 
-export async function createMemory(body: { kind?: string; content: string; tags?: string }): Promise<{ id: string }> {
+export async function createMemory(body: { kind?: string; content: string; tags?: string; source?: string }): Promise<{ id: string }> {
   const res = await fetch(`${BASE}/api/memories`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),

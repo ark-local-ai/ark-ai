@@ -313,6 +313,12 @@
 .mem-content { font-size: 13.5px; color: var(--text-1); line-height: 1.6; flex: 1; white-space: pre-wrap; }
 .mem-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
 
+/* M60 记忆来源溯源——展示这条记忆从哪来，会话来源可点开回链 */
+.mem-src { display: flex; align-items: center; gap: 4px; margin-top: 8px; min-height: 16px; }
+.source-tag { font-size: 11px; color: var(--text-3); }
+.link-btn { border: none; background: none; cursor: pointer; font-size: 11px; color: var(--brand); display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 6px; }
+.link-btn:hover { background: var(--brand-soft); color: var(--brand); }
+
 /* 记忆注入提示（M42） */
 .mem-flash { background: var(--brand-soft); color: var(--brand); border: 1px solid var(--brand); font-size: 11.5px; animation: memIn 0.25s ease; }
 @keyframes memIn { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }

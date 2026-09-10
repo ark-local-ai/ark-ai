@@ -108,19 +108,23 @@ export async function chatRoutes(app: FastifyInstance) {
     }));
     history.push({ role: "user", content: message });
 
-    // M42：`/记得 …` 命令——把一句话沉淀为记忆并回执，不进入模型/任务
-    const remembered = parseRemember(message);
-    if (remembered) {
-      reply.raw.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        "X-Accel-Buffering": "no",
-      });
-      const send = (type: string, data: unknown) => {
-        reply.raw.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
-      };
-      const id = createMemory({ kind: remembered.kind, content: remembered.content }, userId);
+      // M42：`/记得 …` 命令——把一句话沉淀为记忆并回执，不进入模型/任务
+      // M60：source 记为 "chat:<sessionId>"，前端可回链到本会话
+      const remembered = parseRemember(message);
+      if (remembered) {
+        reply.raw.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+        const send = (type: string, data: unknown) => {
+          reply.raw.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+        };
+        const id = createMemory(
+          { kind: remembered.kind, content: remembered.content, source: `chat:${sessionId}` },
+          userId,
+        );
       const reason = `已记住：${remembered.content.slice(0, 40)}${remembered.kind ? `（${remembered.kind}）` : ""}`;
       appendChatMessage(sessionId, "assistant", reason);
       send("memory_saved", { id, content: remembered.content, kind: remembered.kind });

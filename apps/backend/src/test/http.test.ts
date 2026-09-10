@@ -519,3 +519,28 @@ describe("记忆合并 API（M59）", () => {
     expect(missing.statusCode).toBe(404);
   });
 });
+
+describe("记忆来源溯源 API（M60）", () => {
+  it("POST /api/memories 手动画 source 落库透出；缺省返 manual", async () => {
+    const withSrc = await post("/api/memories", { kind: "note", content: "带来源", source: "chat:abc" });
+    expect(withSrc.statusCode).toBe(201);
+    expect(store.getMemory(withSrc.json().id)!.source).toBe("chat:abc");
+
+    const noSrc = await post("/api/memories", { kind: "note", content: "不带来源" });
+    expect(noSrc.statusCode).toBe(201);
+    expect(store.getMemory(noSrc.json().id)!.source).toBe("manual");
+  });
+
+  it("POST /:id/distill/save 落库记忆带 chat-distill 来源", async () => {
+    const sid = store.createChatSession("M60 会话", "u1");
+    store.appendChatMessage(sid, "user", "我喜欢墨绿配色");
+    store.appendChatMessage(sid, "assistant", "收到");
+
+    const ok = await post(`/api/chat/sessions/${sid}/distill/save`, {
+      facts: [{ kind: "preference", content: "喜欢墨绿配色" }],
+    });
+    expect(ok.statusCode).toBe(200);
+    const savedId = (ok.json() as { saved: { id: string }[] }).saved[0].id;
+    expect(store.getMemory(savedId)!.source).toBe(`chat-distill:${sid}`);
+  });
+});

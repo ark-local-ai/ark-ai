@@ -35,11 +35,11 @@ export async function memoryRoutes(app: FastifyInstance) {
     return reply.send(m);
   });
 
-  app.post<{ Body: { kind?: string; content?: string; tags?: string } }>("/", async (req, reply) => {
+  app.post<{ Body: { kind?: string; content?: string; tags?: string; source?: string } }>("/", async (req, reply) => {
     const content = (req.body?.content ?? "").trim();
     if (!content) return reply.code(400).send({ error: "记忆内容必填" });
     const id = createMemory(
-      { kind: req.body?.kind, content, tags: req.body?.tags },
+      { kind: req.body?.kind, content, tags: req.body?.tags, source: req.body?.source ?? "manual" },
       currentUser(req)?.id,
     );
     return reply.code(201).send({ id });
