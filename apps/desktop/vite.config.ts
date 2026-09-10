@@ -9,6 +9,11 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   base: './',
+  // 桌面壳走自定义协议（无 Vite 服务器），相对 /api 接不到后端；
+  // 构建期把 API base 指向本地后端（仅本机，数据不出本机）。
+  define: {
+    'import.meta.env.VITE_API_BASE': JSON.stringify('http://127.0.0.1:4000'),
+  },
   server: {
     port: 5174,
     strictPort: true,

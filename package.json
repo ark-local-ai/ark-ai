@@ -1,0 +1,11 @@
+{
+  "name": "ark",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Ark · 方舟 — 本地优先的 AI Agent 生产力工作台（monorepo 根，提供一键本地启动）",
+  "scripts": {
+    "build": "npm --prefix apps/backend run build && npm --prefix apps/frontend run build",
+    "start": "node scripts/start.mjs",
+    "start:webonly": "npm --prefix apps/frontend run preview"
+  }
+}

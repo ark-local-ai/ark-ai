@@ -81,6 +81,15 @@ aiWork/
 
 ## 五、如何跑起来
 
+### 方式 A：一键本地启动器（推荐，M66）
+```bash
+npm install          # 仓库根：装根依赖；再分别进 apps/backend、apps/frontend 各 npm install
+npm run build        # 编后端(含 fix-esm) + 前端
+npm start            # 起后端 :4000 + 前端预览 :4173(代理 /api)，自动开浏览器到 /app
+```
+`npm start` 会校验构建产物、起两个服务、健康探测通过后自动打开浏览器到 `http://127.0.0.1:4173/app`。
+
+### 方式 B：开发态（tsx + vite dev 热更新）
 ```bash
 # 终端 1：后端
 cd apps/backend
@@ -92,7 +101,6 @@ cd apps/frontend
 npm install
 npm run dev        # Vite 起在 http://127.0.0.1:5173 （/api 自动代理到 :4000）
 ```
-
 打开 http://127.0.0.1:5173/app → 在输入框输一句话 → 点发送 → 跳转任务页，步骤逐个点亮，最后生成可下载的 `.md` 成果文件。
 
 ---

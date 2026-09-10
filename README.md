@@ -25,15 +25,22 @@ CONTRIBUTING.md    # 贡献指南 / 提交规范
 |---|---|
 | ![官网落地页](screenshots/site-landing.png) | ![工作台首页](screenshots/workbench-home.png) |
 
-## 快速开始（前端）
+## 快速开始
+
+### 一键本地启动（推荐，M66）
 ```bash
-cd apps/frontend
-npm install
-npm run dev        # 开发，http://localhost:5173 （/ 官网 · /app 工作台）
-npm run build      # 生产构建 dist/
+npm install          # 仓库根；后端 apps/backend、前端 apps/frontend 亦需各自 npm install
+npm run build        # 编后端(含 ESM 修复) + 前端
+npm start            # 起后端 :4000 + 前端预览 :4173(代理 /api)，自动开浏览器到 /app
 ```
 
-## 快速开始（桌面版，Windows）
+### 开发态（tsx + vite dev 热更新）
+```bash
+cd apps/backend && npm install && npm run dev   # 后端 http://127.0.0.1:4000
+cd apps/frontend && npm install && npm run dev  # 前端 http://localhost:5173（/ 官网 · /app 工作台）
+```
+
+## 桌面版（Windows）
 ```bash
 cd apps/desktop
 npm install
