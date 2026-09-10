@@ -407,3 +407,20 @@ describe("联网搜索源管理 API（M53）", () => {
     await post("/api/tools/search/source/quota", { rpm: 30 });
   });
 });
+
+describe("资料加工 API（M54 refine）", () => {
+  it("POST /refine 非法 kind → 400；缺 text → 400；合法调用回 viaLLM/文本（无渠道则脚本降级）", async () => {
+    const badKind = await post("/api/tools/refine", { kind: "nope", text: "x" });
+    expect(badKind.statusCode).toBe(400);
+
+    const noText = await post("/api/tools/refine", { kind: "summarize" });
+    expect(noText.statusCode).toBe(400);
+
+    // 合法调用：本测试环境通常无可用模型渠道 → 走确定性降级，viaLLM=false 但返回文本
+    const ok = await post("/api/tools/refine", { kind: "summarize", text: "一段需要总结的资料正文内容。" });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json();
+    expect(body.kind).toBe("summarize");
+    expect(typeof body.text).toBe("string");
+  });
+});

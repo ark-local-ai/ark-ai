@@ -7,6 +7,7 @@ import { searchKnowledge } from "../tools/knowledge";
 import { searchWeb } from "../tools/websearch";
 import { renderPage } from "../tools/browser";
 import { saveToWorkspace } from "../tools/save";
+import { refineText } from "../tools/refine";
 import {
   getSearchSourceStatus, setWebSearchEnabled, isWebSearchEnabled,
   updateSearchProvider, setQuota, getQuotaStatus,
@@ -96,6 +97,25 @@ export async function toolRoutes(app: FastifyInstance) {
       return reply.send(r);
     },
   );
+
+  // M54：搜索结果后续加工——把已读到的正文总结/翻译（LLM 优先，脚本降级）
+  app.post<{
+    Body: { kind?: "summarize" | "translate"; text?: string; title?: string; lang?: string; to?: string; maxLen?: number };
+  }>("/refine", async (req, reply) => {
+    const kind = req.body?.kind;
+    if (kind !== "summarize" && kind !== "translate") {
+      return reply.code(400).send({ error: "kind 须为 summarize 或 translate" });
+    }
+    const text = (req.body?.text ?? "").trim();
+    if (!text) return reply.code(400).send({ error: "text 必填" });
+    const r = await refineText(kind, text, {
+      title: req.body?.title,
+      lang: req.body?.lang,
+      to: req.body?.to,
+      maxLen: req.body?.maxLen,
+    });
+    return reply.send(r);
+  });
 
   // M50 副线 + M53 搜索源管理：联网搜索源设置（可控、可显式关停、provider 可配、配额限流）
   app.get("/search/source", async () => getSearchSourceStatus());

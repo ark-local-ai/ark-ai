@@ -4,7 +4,7 @@ import { ftColor, ftLabel } from "../data/mock";
 import {
   listSpaces, listSpaceFiles, createSpace, setActiveSpace, deleteSpace,
   workspaceUrl, searchWorkspace, listFileVersions, rollbackFileVersion,
-  webSearch, webRead, webRender, saveToWorkspace, getSearchSource, setSearchSourceEnabled, createTask,
+  webSearch, webRead, webRender, saveToWorkspace, getSearchSource, setSearchSourceEnabled, createTask, refineText,
   type WebSearchHit,
   type SpaceDto, type WorkspaceFileDto, type WorkspaceSearchResult, type FileVersionDto,
 } from "../api";
@@ -189,6 +189,39 @@ export default function Workspace() {
     }
   };
 
+  // M54：资料加工——把已读到的正文就地「总结 / 翻译」（LLM 优先，脚本降级）
+  const [wrefine, setWrefine] = useState<Record<string, { kind: "summarize" | "translate"; text: string; viaLLM: boolean; label: string }>>({});
+  const [wrefining, setWrefining] = useState("");
+  const doRefine = async (h: WebSearchHit, kind: "summarize" | "translate") => {
+    // 取正文（已有展开正文用之，否则现读，JS 页走浏览器兜底）
+    let text = wover[h.url];
+      if (!text || text.startsWith("⚠ ")) {
+        setWreading(h.url);
+        const r = await readOrRender(h.url);
+        setWreading("");
+        if (r.error || !r.text?.trim()) { setSaveMsg({ ok: false, text: `读取失败：${r.error || "内容为空"}` }); return; }
+        text = r.text;
+        setWmode((m) => ({ ...m, [h.url]: r.mode }));
+        setWover((o) => ({ ...o, [h.url]: r.text }));
+      }
+      setWrefining(`${h.url}::${kind}`);
+      const r = await refineText(kind, text, { title: h.title, to: kind === "translate" ? "简体中文" : undefined, lang: "中文", maxLen: 400 });
+      setWrefining("");
+      const label = kind === "translate" ? "翻译" : "总结";
+      setWrefine((m) => ({ ...m, [`${h.url}::${kind}`]: { kind, text: r.text, viaLLM: r.viaLLM, label } }));
+      if (r.error) setSaveMsg({ ok: false, text: `${label}未走模型（脚本降级）：${r.error}` });
+  };
+  // M54：把加工结果也存进资料库
+  const doSaveRefined = async (h: WebSearchHit, kind: "summarize" | "translate") => {
+    const item = wrefine[`${h.url}::${kind}`];
+    if (!item || !item.text) return;
+    const res = await saveToWorkspace({
+      title: `${h.title ?? h.url}（${item.label}）`, url: h.url, text: item.text, source: `${kind}`,
+    });
+    if (res.error) setSaveMsg({ ok: false, text: res.error });
+    else { setSaveMsg({ ok: true, text: `已存入资料库：${res.name}` }); loadFiles(activeId); }
+  };
+
   return (
     <div className="page">
       <div className="workspace-wrap">
@@ -298,6 +331,14 @@ export default function Workspace() {
                       <button className="btn soft sm" onClick={() => doSendToTask(h)} title="把全文作为参考资料，创建一条新任务">
                         送给任务
                       </button>
+                      <button className="btn soft sm" onClick={() => { if (wrefining === `${h.url}::summarize`) return; doRefine(h, "summarize"); }}
+                        title="把已读到的正文就地总结成要点">
+                        {wrefining === `${h.url}::summarize` ? "总结中…" : "总结"}
+                      </button>
+                      <button className="btn soft sm" onClick={() => { if (wrefining === `${h.url}::translate`) return; doRefine(h, "translate"); }}
+                        title="把已读到的正文翻译成简体中文">
+                        {wrefining === `${h.url}::translate` ? "翻译中…" : "翻译"}
+                      </button>
                       <button className="btn ghost sm" style={{ marginLeft: "auto" }}
                         onClick={() => doRead(h)}>
                         {wreading === h.url ? "读取中…" : wover[h.url] ? "收起" : "读正文"}
@@ -312,6 +353,24 @@ export default function Workspace() {
                         {wover[h.url]}
                       </pre>
                     )}
+                    {(["summarize", "translate"] as const).map((kind) => {
+                      const item = wrefine[`${h.url}::${kind}`];
+                      if (!item) return null;
+                      return (
+                        <div key={kind} style={{ marginTop: 8, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", background: "var(--brand-soft)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <b style={{ fontSize: 12, color: "var(--brand)" }}>{item.label}</b>
+                            <span style={{ fontSize: 10.5, color: "var(--text-3)" }}>{item.viaLLM ? "模型产出" : "脚本降级"}</span>
+                            <button className="btn soft sm" style={{ marginLeft: "auto" }} onClick={() => doSaveRefined(h, kind)}>
+                              存入资料库
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)", marginTop: 6, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 300, overflow: "auto" }}>
+                            {item.text}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
               </div>

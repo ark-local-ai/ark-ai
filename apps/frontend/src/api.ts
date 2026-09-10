@@ -186,6 +186,30 @@ export async function webRender(url: string): Promise<WebRenderResult> {
   return res.json() as Promise<WebRenderResult>;
 }
 
+// ===== M54 资料加工（总结 / 翻译）：把已读到的正文就地加工 =====
+export interface RefineResult {
+  kind: "summarize" | "translate";
+  text: string;
+  viaLLM: boolean;
+  error?: string;
+}
+/** 把正文总结成要点或翻译成目标语言（LLM 优先，脚本降级返回 error/截取） */
+export async function refineText(
+  kind: "summarize" | "translate",
+  text: string,
+  opts?: { title?: string; lang?: string; to?: string; maxLen?: number },
+): Promise<RefineResult> {
+  const res = await authFetch("/api/tools/refine", {
+    method: "POST",
+    body: JSON.stringify({ kind, text, ...opts }),
+  });
+  if (!res.ok) {
+    const e = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind, text: "", viaLLM: false, error: e.error ?? `加工失败(${res.status})` };
+  }
+  return res.json();
+}
+
 // ===== M50 保存到资料库 + 联网搜索源设置 =====
 export interface SaveToWorkspaceResult {
   name: string;
