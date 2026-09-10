@@ -7,15 +7,20 @@ import { currentUser } from "./auth.js";
 
 export async function taskRoutes(app: FastifyInstance) {
   // 创建任务并开始编排（后台异步推进，SSE 接收进度）
-  app.post<{ Body: { prompt?: string } }>("/", async (req, reply) => {
+  // M52：可选 refs=[{title?,url?,text}] 作为「送给任务」的参考资料跟随任务注入上下文
+  app.post<{ Body: { prompt?: string; refs?: { title?: string; url?: string; text: string }[] } }>("/", async (req, reply) => {
     const prompt = req.body?.prompt?.trim();
     if (!prompt) {
       return reply.code(400).send({ error: "prompt 不能为空" });
     }
+    const rawRefs = Array.isArray(req.body?.refs) ? req.body!.refs : [];
+    const refs = rawRefs
+      .filter((r) => r && typeof r.text === "string" && r.text.trim())
+      .map((r) => ({ title: r.title?.trim() || undefined, url: r.url?.trim() || undefined, text: r.text.trim() }));
     const id = randomUUID().slice(0, 8);
     const userId = currentUser(req)?.id; // 归属当前登录用户；未登录 → 全局
     // 立即返回任务 id；编排入队后台串行执行（队列 + 失败兜底 + 超时，见 runner）
-    enqueueTask(id, prompt, userId);
+    enqueueTask(id, prompt, userId, refs.length ? { refs } : undefined);
     return reply.code(201).send({ taskId: id });
   });
 

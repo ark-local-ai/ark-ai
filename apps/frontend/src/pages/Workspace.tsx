@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ftColor, ftLabel } from "../data/mock";
 import {
   listSpaces, listSpaceFiles, createSpace, setActiveSpace, deleteSpace,
   workspaceUrl, searchWorkspace, listFileVersions, rollbackFileVersion,
-  webSearch, webRead, webRender, saveToWorkspace, getSearchSource, setSearchSourceEnabled,
+  webSearch, webRead, webRender, saveToWorkspace, getSearchSource, setSearchSourceEnabled, createTask,
   type WebSearchHit,
   type SpaceDto, type WorkspaceFileDto, type WorkspaceSearchResult, type FileVersionDto,
 } from "../api";
 
 export default function Workspace() {
+  const nav = useNavigate();
   const [spaces, setSpaces] = useState<SpaceDto[]>([]);
   const [activeId, setActiveId] = useState<string>("default");
   const [files, setFiles] = useState<WorkspaceFileDto[] | null>(null);
@@ -165,6 +167,27 @@ export default function Workspace() {
     if (res.error) setSaveMsg({ ok: false, text: res.error });
     else { setSaveMsg({ ok: true, text: `已存入资料库：${res.name}` }); loadFiles(activeId); }
   };
+  // M52：「送给任务」——把这条例给一条新任务当参考资料，任务执行时注入上下文/参考资料 section
+  const doSendToTask = async (h: WebSearchHit) => {
+    const instruction = window.prompt("创建任务，把这条例存为参考资料。请输入任务指令：", `请基于参考资料${h.title ? `《${h.title}》` : ""}整理一份分析`);
+    if (!instruction || !instruction.trim()) return;
+    let text = wover[h.url];
+    if (!text || text.startsWith("⚠ ")) {
+      setWreading(h.url);
+      const r = await readOrRender(h.url);
+      setWreading("");
+      if (r.error || !r.text?.trim()) { setSaveMsg({ ok: false, text: `读取失败：${r.error || "内容为空"}` }); return; }
+      text = r.text;
+      setWmode((m) => ({ ...m, [h.url]: r.mode }));
+      setWover((o) => ({ ...o, [h.url]: r.text }));
+    }
+    try {
+      const taskId = await createTask(instruction.trim(), [{ title: h.title, url: h.url, text }]);
+      nav(`/app/task?taskId=${taskId}`);
+    } catch (e) {
+      setSaveMsg({ ok: false, text: e instanceof Error ? e.message : "送任务失败" });
+    }
+  };
 
   return (
     <div className="page">
@@ -271,6 +294,9 @@ export default function Workspace() {
                       )}
                       <button className="btn soft sm" onClick={() => doSaveHit(h)} title="把正文保存为资料库 markdown 文件">
                         {wreading === h.url ? "读取中…" : "存资料库"}
+                      </button>
+                      <button className="btn soft sm" onClick={() => doSendToTask(h)} title="把全文作为参考资料，创建一条新任务">
+                        送给任务
                       </button>
                       <button className="btn ghost sm" style={{ marginLeft: "auto" }}
                         onClick={() => doRead(h)}>

@@ -42,4 +42,27 @@ describe("编排上下文采集（M46 context）", () => {
     expect(ctx.hasRef).toBe(true);
     expect(ctx.contextText).toContain("季度销售目标 200 万");
   });
+
+  it("M52 gatherContext 注入显式 refs（送给任务）→ 上下文含 ref 正文且 hasRef=true", async () => {
+    const ctx = await gatherContext("写一份分析", undefined, [
+      { title: "趋势报告", url: "https://a.com/x", text: "这是用户指定带过去的参考资料正文。" },
+    ]);
+    expect(ctx.refs).toHaveLength(1);
+    expect(ctx.hasRef).toBe(true);
+    expect(ctx.contextText).toContain("参考资料");
+    expect(ctx.contextText).toContain("这是用户指定带过去的参考资料正文。");
+  });
+
+  it("M52 appendRefSection 把 refs 收进参考资料 section", () => {
+    const base = [{ title: "一", paragraphs: ["正文"] }];
+    const out = appendRefSection(base, {
+      web: [],
+      knowledge: [],
+      refs: [{ title: "附件", url: "https://a.com", text: "附件正文内容" }],
+    });
+    expect(out).toHaveLength(2);
+    expect(out[1].title).toBe("参考资料");
+    expect(out[1].paragraphs[0]).toContain("用户提供");
+    expect(out[1].paragraphs[1]).toBe("附件正文内容");
+  });
 });

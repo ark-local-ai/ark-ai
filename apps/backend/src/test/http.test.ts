@@ -281,6 +281,30 @@ describe("C3 认证硬门禁（写请求需登录）", () => {
       process.env.ARK_REQUIRE_AUTH = saved;
     }
   });
+
+  it("M52 POST /api/tasks 携带 refs（送给任务）→ 201 返回 taskId（入队成功）", async () => {
+    // refs 逻辑（注入上下文/参考资料 section）已由 context.test.ts 单测覆盖；
+    // 此处只验证路由契约：带 refs 载荷建任务不报错、返回 taskId、空正文 ref 被安全过滤。
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      payload: {
+        prompt: "基于参考资料写一份分析",
+        refs: [
+          { title: "趋势报告", url: "https://a.com/x", text: "这是用户指定带过去的参考资料正文。" },
+          { text: "只有正文的纯片段" },
+          { title: "空正文应被过滤" },
+        ],
+      },
+    });
+    expect(r.statusCode).toBe(201);
+    const { taskId: id } = r.json() as { taskId: string };
+    expect(id).toBeTruthy();
+
+    // 无 prompt → 400
+    const bad = await app.inject({ method: "POST", url: "/api/tasks", payload: { prompt: "  " } });
+    expect(bad.statusCode).toBe(400);
+  });
 });
 
 describe("交付版本 API（C5）", () => {

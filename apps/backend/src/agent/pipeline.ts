@@ -10,7 +10,7 @@
 
 import { chatWithFailover } from "../models/router";
 import { defaultTool, type ToolInput } from "../tools/registry";
-import { gatherContext, appendRefSection, type PipelineContext } from "../tools/context";
+import { gatherContext, appendRefSection, type PipelineContext, type AttachmentRef } from "../tools/context";
 import type { StepContent } from "./../tools/office";
 
 const TIMEOUT_MS = 20000;
@@ -146,9 +146,10 @@ export async function runContentPipeline(
   kind: "ppt" | "xls" | "doc",
   modelHint?: string,
   userId?: string,
+  refs?: AttachmentRef[],
 ): Promise<PipelineResult> {
-  // M46：采集上下文（提示词内网址 web.read + 本地知识 search.knowledge），失败单项静默
-  const ctx: PipelineContext = await gatherContext(prompt, userId);
+  // M46：采集上下文（提示词内网址 web.read + 本地知识 search.knowledge + M52 显式 refs），失败单项静默
+  const ctx: PipelineContext = await gatherContext(prompt, userId, refs);
   const contextText = ctx.hasRef ? ctx.contextText : undefined;
   // 分析师
   const { points, viaLLM: analystLLM } = await analyst(prompt, plan, kind, modelHint, contextText);

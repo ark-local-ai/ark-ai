@@ -20,11 +20,11 @@ export interface TaskDto {
   archived: boolean;
 }
 
-export async function createTask(prompt: string): Promise<string> {
+export async function createTask(prompt: string, refs?: { title?: string; url?: string; text: string }[]): Promise<string> {
   const res = await fetch(`${BASE}/api/tasks`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, refs }),
   });
   if (!res.ok) throw new Error(`创建任务失败: ${res.status}`);
   const data = (await res.json()) as { taskId: string };

@@ -16,9 +16,12 @@ export interface AgentOptions {
   skills?: string[];
   /** 偏好的模型（模板指定），用于路由时把匹配渠道提前（非排他） */
   modelHint?: string;
+  /** M52：显式附加的参考资料（「送给任务」，跟随任务注入多 Agent 上下文） */
+  refs?: AttachmentRef[];
 }
 import { defaultTool } from "../tools/registry";
 import { runContentPipeline } from "./pipeline";
+import { type AttachmentRef } from "../tools/context";
 import { verifyWithRetry } from "./verifier";
 import { taskLogger } from "../util/log";
 
@@ -64,8 +67,9 @@ async function runPlanSteps(opts: {
   sections: StepContent[];
   task: Task;
   modelHint?: string;
+  refs?: AttachmentRef[];
 }): Promise<void> {
-  const { id, userId, plan, stepIds, kind, startIdx, sections, task, modelHint } = opts;
+  const { id, userId, plan, stepIds, kind, startIdx, sections, task, modelHint, refs } = opts;
   const log = taskLogger(id);
 
   // 若从断点开局，前面 done 的步骤已算作"理解需求中"，先同步 checks 基态
@@ -107,7 +111,7 @@ async function runPlanSteps(opts: {
       // 最后一步：生成真实可编辑 Office 文件（PPT/Excel/Word），注入各步结果，带验收重试（最多 3 次）
       const dir = resolveWorkDir();
       // M10b：多 Agent 内容管线（分析师 → 写手 → 校验），LLM 可用时真内容，否则脚本降级
-      const { sections: contentSections, agents } = await runContentPipeline(task.prompt, plan, kind, modelHint, userId);
+      const { sections: contentSections, agents } = await runContentPipeline(task.prompt, plan, kind, modelHint, userId, refs);
       const anyLLM = agents.analyst || agents.writer || agents.editor;
       const { name, kind: fKind } = await verifyWithRetry(
         () => genOffice(task.prompt, plan, dir, contentSections), 3,
@@ -200,7 +204,7 @@ export async function runTask(id: string, prompt: string, userId?: string, opts?
   publish({ type: "step", taskId: id, data: { stepId: stepIds[0], status: "running" } });
 
   // M30 后并发由 runner 管；压缩 sleep 反馈清晰
-  await runPlanSteps({ id, userId, plan, stepIds, kind: detectKind(prompt), startIdx: 0, sections: [], task, modelHint: opts?.modelHint });
+  await runPlanSteps({ id, userId, plan, stepIds, kind: detectKind(prompt), startIdx: 0, sections: [], task, modelHint: opts?.modelHint, refs: opts?.refs });
   return finishTask(id, task);
 }
 

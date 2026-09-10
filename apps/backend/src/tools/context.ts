@@ -11,11 +11,22 @@ export interface PipelineContext {
   web: WebReadResult[];
   knowledge: KnowledgeHit[];
   search?: WebSearchHit[];
+  /** 显式附加的参考资料（M52「送给任务」，建任务时挂上的正文/片段） */
+  refs: AttachmentRef[];
   /** 拼成一段可读上下文文本（给提示词/模型用） */
   contextText: string;
   /** 是否有可引用的资料（决定是否注入「参考资料」section） */
   hasRef: boolean;
 }
+
+/** 一条显式附加的参考资料（与自动抓取的 web.read/搜索不同，是用户指定带过去的） */
+export interface AttachmentRef {
+  title?: string;
+  url?: string;
+  text: string;
+}
+
+type RefLike = Pick<PipelineContext, "web" | "knowledge" | "search" | "refs">;
 
 const URL_RE = /https?:\/\/[^\s"'<>()，。；、]+/gi;
 // M47：提示词命中这类“调研/了解最新”意图（且未给具体网址）→ 触发一次联网搜索
@@ -27,8 +38,11 @@ export function extractUrls(text: string): string[] {
   return [...new Set(m.map((u) => u.replace(/[),.;，。]$/, "").trim()))].slice(0, 2);
 }
 
-function buildContextText(ctx: Pick<PipelineContext, "web" | "knowledge" | "search">): string {
+function buildContextText(ctx: Pick<PipelineContext, "web" | "knowledge" | "search" | "refs">): string {
   const parts: string[] = [];
+  for (const r of ctx.refs ?? []) {
+    parts.push(`【参考资料 ${r.title || r.url || "用户提供"}】${r.url ? `(${r.url})` : ""}\n${r.text}`);
+  }
   for (const w of ctx.web) {
     if (w.error) continue;
     parts.push(`【网页 ${w.title || w.url}】\n${w.text}`);
@@ -36,14 +50,18 @@ function buildContextText(ctx: Pick<PipelineContext, "web" | "knowledge" | "sear
   for (const k of ctx.knowledge) {
     parts.push(`【本地资料·${k.source}·${k.title}】\n${k.snippet}`);
   }
-    for (const h of ctx.search ?? []) {
+  for (const h of ctx.search ?? []) {
     parts.push(`【搜索结果·${h.title}】\n${h.snippet}\n${h.url}`);
   }
   return parts.join("\n\n---\n\n");
 }
 
-/** 采集上下文：读提示词内网址 + 检索本地知识。userId 用于多用户隔离。 */
-export async function gatherContext(prompt: string, userId?: string): Promise<PipelineContext> {
+/** 采集上下文：读提示词内网址 + 检索本地知识 + 显式附加的参考资料。userId 用于多用户隔离。 */
+export async function gatherContext(
+  prompt: string,
+  userId?: string,
+  refs: AttachmentRef[] = [],
+): Promise<PipelineContext> {
   const urls = extractUrls(prompt);
   const web: WebReadResult[] = [];
   for (const u of urls) {
@@ -67,17 +85,21 @@ export async function gatherContext(prompt: string, userId?: string): Promise<Pi
   if (urls.length === 0 && RESEARCH_RE.test(prompt)) {
     try { search = (await searchWeb(prompt)).hits; } catch { /* 静默降级 */ }
   }
-  const contextText = buildContextText({ web, knowledge, search });
-  const hasRef = web.some((w) => !w.error) || knowledge.length > 0 || search.length > 0;
-  return { web, knowledge, search, contextText, hasRef };
+  const contextText = buildContextText({ web, knowledge, search, refs });
+  const hasRef = web.some((w) => !w.error) || knowledge.length > 0 || search.length > 0 || refs.length > 0;
+  return { web, knowledge, search, refs, contextText, hasRef };
 }
 
 /** 把参考资料追加为一个 section（有引用才加）。 */
 export function appendRefSection(
   sections: { title: string; paragraphs: string[] }[],
-  ctx: Pick<PipelineContext, "web" | "knowledge" | "search">,
+  ctx: Pick<PipelineContext, "web" | "knowledge" | "search" | "refs">,
 ): { title: string; paragraphs: string[] }[] {
   const paras: string[] = [];
+  for (const r of ctx.refs ?? []) {
+    paras.push(`用户提供：${r.title || r.url || "参考资料"}${r.url ? `（${r.url}）` : ""}`);
+    paras.push(r.text);
+  }
   for (const w of ctx.web) {
     if (w.error) continue;
     paras.push(`出处：${w.title || w.url}（${w.url}）`);
@@ -86,7 +108,7 @@ export function appendRefSection(
   for (const k of ctx.knowledge) {
     paras.push(`本地资料「${k.title}」：${k.snippet}`);
   }
-    for (const h of ctx.search ?? []) {
+  for (const h of ctx.search ?? []) {
     paras.push(`搜索结果「${h.title}」：${h.snippet}（${h.url}）`);
   }
   if (!paras.length) return sections;
