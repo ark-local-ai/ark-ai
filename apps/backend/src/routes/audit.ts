@@ -54,7 +54,9 @@ function labelFor(method: string, url: string): string {
   if (u.startsWith("/api/tools/web.search") && m === "POST") return "联网搜索工具调用";
   if (u.startsWith("/api/tools/browser.render") && m === "POST") return "浏览器渲染工具调用";
 if (u.startsWith("/api/tools/save") && m === "POST") return "保存到资料库";
-if (u.startsWith("/api/tools/search/source/enabled") && m === "POST") return "联网搜索源开关";
+	if (u.startsWith("/api/tools/search/source/enabled") && m === "POST") return "联网搜索源开关";
+  if (u.startsWith("/api/tools/search/source/provider") && m === "POST") return "配置联网搜索供应商";
+  if (u.startsWith("/api/tools/search/source/quota") && m === "POST") return "调整联网搜索配额";
   if (u === "/api/im" && m === "POST") return "IM 入站消息";
   if (u.startsWith("/api/im") && m === "PUT") return "修改 IM 桥配置";
   if (u.startsWith("/api/jobs") && m === "POST" && u.includes("/run")) return "手动执行任务";

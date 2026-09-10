@@ -1,4 +1,4 @@
-import { isWebSearchEnabled } from "./searchSettings";
+import { isWebSearchEnabled, getConfiguredSearch, tryConsumeQuota } from "./searchSettings";
 
 // ===== 内置联网搜索工具（M47 search.web） =====
 // 本地优先、默认免 key：直接 fetch 一个搜索端点取回标题/链接/摘要，供编排层「调研/搜索」
@@ -57,11 +57,10 @@ export function parseDuckDuckGo(html: string): WebSearchHit[] {
   return hits;
 }
 
-/** 走配置的 endpoint（ARK_WEBSEARCH_ENDPOINT + ARK_WEBSEARCH_KEY） */
+/** 走配置的 endpoint（M53 起库内 websearch_endpoint 优先，env 兜底） */
 async function configuredSearch(query: string): Promise<WebSearchHit[]> {
-  const endpoint = (process.env.ARK_WEBSEARCH_ENDPOINT ?? "").trim();
-  const key = (process.env.ARK_WEBSEARCH_KEY ?? "").trim();
-  if (!endpoint) throw new Error("未配置 ARK_WEBSEARCH_ENDPOINT");
+  const { endpoint, key } = getConfiguredSearch();
+  if (!endpoint) throw new Error("未配置搜索 endpoint");
   const res = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -85,9 +84,13 @@ export async function searchWeb(query: string): Promise<WebSearchResult> {
   if (!q) return { query: q, hits: [], count: 0, error: "query 为空" };
   if (q.length < 2) return { query: q, hits: [], count: 0, error: "query 太短" };
   if (!isWebSearchEnabled()) return { query: q, hits: [], count: 0, error: "联网搜索已关闭" };
+  // M53 配额：滑动窗口限流，超限不发出网请求（避免脚本/误触打爆）
+  if (!tryConsumeQuota()) {
+    return { query: q, hits: [], count: 0, error: "已达到本分钟搜索配额，请稍后再试" };
+  }
   try {
     let hits: WebSearchHit[];
-    if ((process.env.ARK_WEBSEARCH_ENDPOINT ?? "").trim()) {
+    if (getConfiguredSearch().provider === "custom") {
       hits = await configuredSearch(q);
     } else {
       const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;

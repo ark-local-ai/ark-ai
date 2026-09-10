@@ -7,7 +7,11 @@ import { searchKnowledge } from "../tools/knowledge";
 import { searchWeb } from "../tools/websearch";
 import { renderPage } from "../tools/browser";
 import { saveToWorkspace } from "../tools/save";
-import { getSearchSourceStatus, setWebSearchEnabled, isWebSearchEnabled } from "../tools/searchSettings";
+import {
+  getSearchSourceStatus, setWebSearchEnabled, isWebSearchEnabled,
+  updateSearchProvider, setQuota, getQuotaStatus,
+  type SearchProvider,
+} from "../tools/searchSettings";
 import { currentUser } from "./auth";
 
 export interface ToolInfo {
@@ -93,11 +97,35 @@ export async function toolRoutes(app: FastifyInstance) {
     },
   );
 
-  // M50 副线：联网搜索源设置（可控、可显式关停）
+  // M50 副线 + M53 搜索源管理：联网搜索源设置（可控、可显式关停、provider 可配、配额限流）
   app.get("/search/source", async () => getSearchSourceStatus());
   app.post<{ Body: { enabled: boolean } }>("/search/source/enabled", async (req, reply) => {
     if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "enabled 必填" });
     return { enabled: setWebSearchEnabled(req.body.enabled) };
   });
+  // M53：切换/配置搜索 provider（endpoint/key 存库，custom 需给 endpoint）
+  app.post<{ Body: { provider?: SearchProvider; endpoint?: string; key?: string } }>(
+    "/search/source/provider", async (req, reply) => {
+      const provider = req.body?.provider;
+      if (provider !== "duckduckgo" && provider !== "custom") {
+        return reply.code(400).send({ error: "provider 须为 duckduckgo 或 custom" });
+      }
+      const cfg = updateSearchProvider(provider, req.body?.endpoint, req.body?.key);
+      // custom 但没配成 endpoint → 回落 duckduckgo，前端据此提示
+      return {
+        provider: cfg.provider,
+        endpointConfigured: cfg.provider === "custom" && !!cfg.configuredEndpoint,
+        configuredEndpoint: cfg.configuredEndpoint,
+      };
+    },
+  );
+  // M53：设置每分钟搜索配额
+  app.post<{ Body: { rpm?: number } }>("/search/source/quota", async (req, reply) => {
+    const rpm = Number(req.body?.rpm);
+    if (!Number.isFinite(rpm)) return reply.code(400).send({ error: "rpm 必填" });
+    return { quote: setQuota(rpm) };
+  });
+  // M53：查看当前配额使用（供前端实时展示已用/剩余）
+  app.get("/search/source/quota", async () => ({ quote: getQuotaStatus() }));
 }
 

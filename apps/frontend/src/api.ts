@@ -206,15 +206,26 @@ export async function saveToWorkspace(input: {
   return res.json() as Promise<SaveToWorkspaceResult>;
 }
 
+export interface SearchQuotaStatus {
+  rpm: number;
+  used: number;
+  remaining: number;
+  limited: boolean;
+}
 export interface SearchSourceStatus {
   enabled: boolean;
   provider: "duckduckgo" | "custom";
   endpointConfigured: boolean;
+  /** provider 为 custom 时的 endpoint */
+  endpoint?: string;
+  /** provider 为 custom 时是否配了 key */
+  hasKey?: boolean;
+  quote: SearchQuotaStatus;
 }
-/** 读联网搜索源状态（是否启用 / 来源 / 是否配了自定义 endpoint） */
+/** 读联网搜索源状态（是否启用 / 来源 / endpoint / 配额） */
 export async function getSearchSource(): Promise<SearchSourceStatus> {
   const res = await authFetch("/api/tools/search/source");
-  if (!res.ok) return { enabled: true, provider: "duckduckgo", endpointConfigured: false };
+  if (!res.ok) return { enabled: true, provider: "duckduckgo", endpointConfigured: false, quote: { rpm: 30, used: 0, remaining: 30, limited: false } };
   return res.json();
 }
 /** 开关联网搜索（符合「数据不出机器」：可显式关停出网能力） */
@@ -223,6 +234,38 @@ export async function setSearchSourceEnabled(enabled: boolean): Promise<{ enable
     method: "POST",
     body: JSON.stringify({ enabled }),
   });
+  return res.json();
+}
+
+// ===== M53 联网搜索源管理（provider 配置 + 配额）=====
+export interface SearchProviderResult {
+  provider: "duckduckgo" | "custom";
+  endpointConfigured: boolean;
+  configuredEndpoint: string;
+}
+/** 切换/配置搜索 provider（endpoint/key 存库；custom 需给 endpoint，否则回退 duckduckgo） */
+export async function setSearchProvider(
+  provider: "duckduckgo" | "custom",
+  endpoint?: string,
+  key?: string,
+): Promise<SearchProviderResult> {
+  const res = await authFetch("/api/tools/search/source/provider", {
+    method: "POST",
+    body: JSON.stringify({ provider, endpoint, key }),
+  });
+  return res.json();
+}
+/** 设置每分钟搜索配额 */
+export async function setSearchQuota(rpm: number): Promise<{ quote: SearchQuotaStatus }> {
+  const res = await authFetch("/api/tools/search/source/quota", {
+    method: "POST",
+    body: JSON.stringify({ rpm }),
+  });
+  return res.json();
+}
+/** 读当前配额使用 */
+export async function getSearchQuota(): Promise<{ quote: SearchQuotaStatus }> {
+  const res = await authFetch("/api/tools/search/source/quota");
   return res.json();
 }
 

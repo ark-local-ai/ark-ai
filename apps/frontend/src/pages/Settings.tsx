@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   listChannels, createChannel, updateChannel, deleteChannel, setDefaultChannel, testChannel,
-  type ChannelDto,
+  getSearchSource, setSearchSourceEnabled, setSearchProvider, setSearchQuota, webSearch,
+  type ChannelDto, type SearchSourceStatus,
 } from "../api";
 
 const GROUPS: { label?: string; items: string[] }[] = [
@@ -22,6 +23,26 @@ export default function Settings() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
+
+  // —— M53 联网搜索源管理 ——
+  const [ws, setWs] = useState<SearchSourceStatus | null>(null);
+  const [wsErr, setWsErr] = useState("");
+  const [wsProv, setWsProv] = useState<"duckduckgo" | "custom">("duckduckgo");
+  const [wsEndpoint, setWsEndpoint] = useState("");
+  const [wsKey, setWsKey] = useState("");
+  const [wsRpm, setWsRpm] = useState("30");
+  const [wsTest, setWsTest] = useState("");
+
+  const loadSearchSource = () => {
+    setWsErr("");
+    getSearchSource().then((s) => {
+      setWs(s);
+      setWsProv(s.provider);
+      setWsEndpoint(s.endpoint ?? "");
+      setWsRpm(String(s.quote.rpm));
+    }).catch(() => setWsErr("后端未启动，搜索源读不到"));
+  };
+  useEffect(() => { if (sec === "联网搜索") loadSearchSource(); }, [sec]);
 
   const load = () => {
     setErr(false);
@@ -152,6 +173,125 @@ export default function Settings() {
                   </div>
                 </div>
               ))}
+            </>
+          ) : sec === "联网搜索" ? (
+            <>
+              <h2 style={{ fontSize: 20, marginBottom: 6 }}>联网搜索</h2>
+              <p style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 16 }}>
+                联网搜索会把你的查询经本机出网。默认免 key 的 DuckDuckGo，可换成自配 provider；数据不出本机原则下，出网可随时显式关停。
+              </p>
+
+              {wsErr && <div style={{ fontSize: 12, color: "var(--warn)", marginBottom: 12 }}>{wsErr}</div>}
+
+              {/* 启用开关 */}
+              <div className="card" style={{ padding: "14px 18px", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>联网搜索</div>
+                    <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 3 }}>
+                      {ws?.enabled === false ? "已关停：编排不再自动联网，web.search 将返回 403" : "已启用：搜索/调研类提示词会自动联网"}
+                    </div>
+                  </div>
+                  <button
+                    className={`btn ${ws?.enabled === false ? "primary" : "ghost"} sm`}
+                    onClick={async () => {
+                      const next = !(ws?.enabled ?? true);
+                      await setSearchSourceEnabled(next).catch(() => {});
+                      loadSearchSource();
+                    }}
+                  >
+                    {ws?.enabled === false ? "启用" : "关停"}
+                  </button>
+                </div>
+              </div>
+
+              {/* 供应商配置 */}
+              <div className="card" style={{ padding: "16px 18px", marginBottom: 14 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>搜索供应商</div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <label style={{ fontSize: 13 }}>来源
+                      <select className="inp" style={{ width: "auto", marginLeft: 8 }} value={wsProv}
+                        onChange={(e) => setWsProv(e.target.value as "duckduckgo" | "custom")}>
+                        <option value="duckduckgo">DuckDuckGo（免 key 默认）</option>
+                        <option value="custom">自配 provider</option>
+                      </select>
+                    </label>
+                    <span className="pill" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>
+                      {ws?.provider === "custom" ? "自配 · 已生效" : "免 key"}
+                    </span>
+                  </div>
+
+                  {wsProv === "custom" && (
+                    <>
+                      <input className="inp" placeholder="Endpoint，如：https://search.example.com/v1"
+                        value={wsEndpoint} onChange={(e) => setWsEndpoint(e.target.value)} />
+                      <input className="inp" type="password" placeholder="API Key（可选）"
+                        value={wsKey} onChange={(e) => setWsKey(e.target.value)} />
+                      {ws?.hasKey && wsKey === "" && (
+                        <div style={{ fontSize: 12, color: "var(--text-3)" }}>已保存过一个 Key（此处留空则沿用）</div>
+                      )}
+                    </>
+                  )}
+
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <button className="btn primary sm" onClick={async () => {
+                      setWsErr("");
+                      const r = await setSearchProvider(wsProv,
+                        wsProv === "custom" ? wsEndpoint : undefined,
+                        wsProv === "custom" ? wsKey : undefined,
+                      ).catch(() => ({ provider: "duckduckgo", endpointConfigured: false, configuredEndpoint: "" }) as { provider: "duckduckgo" | "custom"; endpointConfigured: boolean; configuredEndpoint: string });
+                      if (r.provider === "custom" && !r.endpointConfigured) {
+                        setWsErr("自配 provider 需要有效的 Endpoint（未配置则回落 DuckDuckGo）");
+                      } else {
+                        setWsKey("");
+                      }
+                      loadSearchSource();
+                    }}>保存供应商</button>
+                    <span style={{ fontSize: 12, color: "var(--text-3)" }}>
+                      {ws?.endpoint ? `当前：${ws.endpoint}` : "当前：DuckDuckGo 免 key"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 配额 */}
+              <div className="card" style={{ padding: "16px 18px", marginBottom: 14 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>配额（防出网打爆）</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <input className="inp" style={{ width: 130 }} placeholder="次/分钟"
+                    value={wsRpm} onChange={(e) => setWsRpm(e.target.value)} />
+                  <button className="btn primary sm" onClick={async () => {
+                    setWsErr("");
+                    await setSearchQuota(Number(wsRpm) || 30).catch(() => {});
+                    loadSearchSource();
+                  }}>保存配额</button>
+                  {ws && (
+                    <span style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+                      本分钟已用 <b>{ws.quote.used}</b> / {ws.quote.rpm}
+                      {ws.quote.limited ? "（已达上限，超出的搜索将返回『请稍后再试』）" : `，剩余 ${ws.quote.remaining}`}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 测试搜索 */}
+              <div className="card" style={{ padding: "16px 18px" }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>测试搜索</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <input className="inp" placeholder="输入关键词试搜，如：行业报告"
+                    value={wsTest} onChange={(e) => setWsTest(e.target.value)} />
+                  <button className="btn soft sm" disabled={!wsTest.trim()} onClick={async () => {
+                    setWsErr("");
+                    const r = await webSearch(wsTest.trim());
+                    if (r.error) {
+                      setWsErr(`试搜失败：${r.error}`);
+                    } else {
+                      setWsErr(`试搜成功：返回 ${r.count} 条结果（第一条「${r.hits[0]?.title ?? ""}」）`);
+                    }
+                  }}>试搜</button>
+                </div>
+              </div>
             </>
           ) : (
             <div className="hint-wrap">

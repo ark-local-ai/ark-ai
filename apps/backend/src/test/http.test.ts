@@ -363,3 +363,47 @@ describe("用户自建专家 API（C6）", () => {
     expect(rows.some((x) => x.action.includes("专家"))).toBe(true);
   });
 });
+
+describe("联网搜索源管理 API（M53）", () => {
+  it("GET /search/source 返回启停/provider/配额；默认 duckduckgo + rpm", async () => {
+    const r = await get("/api/tools/search/source");
+    expect(r.statusCode).toBe(200);
+    const s = r.json();
+    expect(s.enabled).toBe(true);
+    expect(s.provider).toBe("duckduckgo");
+    expect(s.quote.rpm).toBeGreaterThan(0);
+  });
+
+  it("POST /provider 切 custom 存 endpoint/key，再读回；非法 provider 400", async () => {
+    const ok = await post("/api/tools/search/source/provider",
+      { provider: "custom", endpoint: "https://search.example.com/v1", key: "sk-abc" });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().provider).toBe("custom");
+
+    const s = (await get("/api/tools/search/source")).json();
+    expect(s.provider).toBe("custom");
+    expect(s.endpoint).toBe("https://search.example.com/v1");
+    expect(s.hasKey).toBe(true);
+
+    const bad = await post("/api/tools/search/source/provider", { provider: "nope" });
+    expect(bad.statusCode).toBe(400);
+
+    // 切回 duckduckgo 清理
+    await post("/api/tools/search/source/provider", { provider: "duckduckgo" });
+  });
+
+  it("POST /quota 调整配额（含上下限钳制）；缺 rpm 400", async () => {
+    const ok = await post("/api/tools/search/source/quota", { rpm: 5 });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().quote.rpm).toBe(5);
+
+    const huge = await post("/api/tools/search/source/quota", { rpm: 99999 });
+    expect(huge.json().quote.rpm).toBe(6000);
+
+    const bad = await post("/api/tools/search/source/quota", {});
+    expect(bad.statusCode).toBe(400);
+
+    // 复位
+    await post("/api/tools/search/source/quota", { rpm: 30 });
+  });
+});

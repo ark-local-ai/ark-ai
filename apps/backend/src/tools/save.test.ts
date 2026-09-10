@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { saveToWorkspace, activeWorkspaceDir } from "./save";
 import {
   isWebSearchEnabled, setWebSearchEnabled, getSearchSourceStatus,
+  getConfiguredSearch, updateSearchProvider, getQuotaStatus, tryConsumeQuota, setQuota,
 } from "./searchSettings";
 
 describe("保存到资料库（M50 tools.save）", () => {
@@ -65,5 +66,60 @@ describe("联网搜索源设置（M50 副线）", () => {
     expect(s.provider).toBe("duckduckgo"); // 未配 ARK_WEBSEARCH_ENDPOINT
     setWebSearchEnabled(false);
     expect(getSearchSourceStatus().enabled).toBe(false);
+  });
+});
+
+describe("搜索源 provider 配置（M53 searchSettings）", () => {
+  it("默认 duckduckgo，未配 endpoint", () => {
+    const cfg = getConfiguredSearch();
+    expect(cfg.provider).toBe("duckduckgo");
+    expect(cfg.configuredEndpoint).toBe("");
+  });
+
+  it("updateSearchProvider('custom', ep) → provider=custom、endpoint 落库可读回", () => {
+    const cfg = updateSearchProvider("custom", "https://search.example.com/v1", "sk-test");
+    expect(cfg.provider).toBe("custom");
+    expect(cfg.configuredEndpoint).toBe("https://search.example.com/v1");
+    expect(cfg.key).toBe("sk-test");
+  });
+
+  it("custom 不配 endpoint → 回落 duckduckgo（未生效）", () => {
+    const cfg = updateSearchProvider("custom", "   ");
+    expect(cfg.provider).toBe("duckduckgo");
+  });
+
+  it("切回 duckduckgo 清掉库内 endpoint/key，status 不再暴露 hasKey", () => {
+    updateSearchProvider("custom", "https://a.test", "k");
+    updateSearchProvider("duckduckgo");
+    expect(getConfiguredSearch().provider).toBe("duckduckgo");
+    const s = getSearchSourceStatus();
+    expect(s.provider).toBe("duckduckgo");
+    expect((s as { hasKey?: boolean }).hasKey).toBeUndefined();
+  });
+});
+
+describe("搜索配额（M53 节流限流）", () => {
+  afterEach(() => setQuota(30));
+
+  it("默认 rpm=30、初始剩满、未超限", () => {
+    const q = getQuotaStatus();
+    expect(q.rpm).toBe(30);
+    expect(q.used).toBe(0);
+    expect(q.remaining).toBe(30);
+    expect(q.limited).toBe(false);
+  });
+
+  it("tryConsumeQuota 消耗计数，达到上限后拒绝", () => {
+    setQuota(2);
+    expect(tryConsumeQuota()).toBe(true);
+    expect(tryConsumeQuota()).toBe(true);
+    expect(getQuotaStatus().limited).toBe(true);
+    expect(tryConsumeQuota()).toBe(false); // 超额拒绝
+    expect(getQuotaStatus().used).toBe(2);
+  });
+
+  it("setQuota 钳制到 1~6000", () => {
+    expect(setQuota(0).rpm).toBe(1);
+    expect(setQuota(99999).rpm).toBe(6000);
   });
 });
