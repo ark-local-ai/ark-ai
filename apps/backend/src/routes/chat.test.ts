@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { looksLikeTask, parseRemember } from "./chat";
+import { looksLikeTask, parseRemember, parseMemRecall, extractMemRefs } from "./chat";
 
 describe("对话式任务意图检测（M40 looksLikeTask）", () => {
   it("命中「动作 + 产出物」视为任务请求", () => {
@@ -38,5 +38,33 @@ describe("记忆命令解析（M42 parseRemember）", () => {
   it("只有命令没有内容返回 null", () => {
     expect(parseRemember("/记得")).toBeNull();
     expect(parseRemember("/记得  ")).toBeNull();
+  });
+});
+
+describe("记忆主动检索（M55 parseMemRecall）", () => {
+  it("`/记忆 关键词` 解析出关键词", () => {
+    expect(parseMemRecall("/记忆 暖色")).toEqual({ keyword: "暖色" });
+    expect(parseMemRecall("/记忆   配色")).toEqual({ keyword: "配色" });
+  });
+
+  it("`/记忆` 与普通消息解析", () => {
+    expect(parseMemRecall("/记忆")).toEqual({ keyword: "" }); // 留空 → 列最近
+    expect(parseMemRecall("/记忆  ")).toEqual({ keyword: "" });
+    expect(parseMemRecall("你好")).toBeNull(); // 非命令
+    expect(parseMemRecall("帮我做个报告")).toBeNull();
+  });
+});
+
+describe("引用记忆标记（M55 extractMemRefs）", () => {
+  it("抽取 `📌 引用记忆：内容` 行（去重）", () => {
+    const refs = extractMemRefs(
+      "帮我看看\n📌 引用记忆：用户偏好暖米白配色\n📌 引用记忆：用户偏好暖米白配色\n📌 引用记忆：团队 5 个人",
+    );
+    expect(refs).toEqual(["用户偏好暖米白配色", "团队 5 个人"]);
+  });
+
+  it("无标记返回空数组", () => {
+    expect(extractMemRefs("普通消息")).toEqual([]);
+    expect(extractMemRefs("")).toEqual([]);
   });
 });

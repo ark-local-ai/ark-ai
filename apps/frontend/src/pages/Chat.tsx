@@ -31,6 +31,9 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [runMode, setRunMode] = useState(false);
   const [memFlash, setMemFlash] = useState<string | null>(null);
+  // M55：/记忆 检索结果芯片（点击引用进输入框）
+  const [memResults, setMemResults] = useState<{ id: string; kind: string; content: string }[]>([]);
+  const [memKeyword, setMemKeyword] = useState("");
   const historyRef = useRef<ChatMsg[]>([]);
 
   const loadSessions = () => {
@@ -118,6 +121,12 @@ export default function Chat() {
         onMemoryCtx: (count) => {
           setMemFlash(`已注入 ${count} 条相关记忆`);
           setTimeout(() => setMemFlash(null), 4000);
+        },
+        onMemorySearch: (items, keyword) => {
+          // /记忆 指令：把命中记忆显示为上方可点选的芯片
+          setMemResults(items);
+          setMemKeyword(keyword);
+          if (memFlash) setMemFlash(null);
         },
         onMemorySaved: (content) => {
           // /记得 已存，替换助理气泡为确认文案
@@ -208,6 +217,27 @@ export default function Chat() {
               </div>
             ))}
           </div>
+          {memResults.length > 0 && (
+            <div className="mem-results" style={{ maxWidth: 760, margin: "0 auto 10px", border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", background: "var(--brand-soft)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <b style={{ fontSize: 12.5, color: "var(--brand)" }}>记忆 · {memKeyword ? `“${memKeyword}”` : "最近"}</b>
+                <span style={{ fontSize: 11, color: "var(--text-3)" }}>点击芯片引用进下一条消息</span>
+                <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setMemResults([])}>×</button>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {memResults.map((m) => (
+                  <button key={m.id} className="pill mem-chip" style={{ cursor: "pointer", textAlign: "left", maxWidth: "100%" }}
+                    title="点击把这条记忆引用到输入框"
+                    onClick={() => {
+                      setV((prev) => `${prev}\n📌 引用记忆：${m.content}`);
+                      setMemResults([]);
+                    }}>
+                    {m.kind && m.kind !== "note" ? `[${m.kind}] ` : ""}{m.content.slice(0, 46)}{m.content.length > 46 ? "…" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="inputbar" style={{ maxWidth: 760, margin: "20px auto 0" }}>
             <textarea rows={1} placeholder="输入消息…" value={v}
               onChange={(e) => setV(e.target.value)}

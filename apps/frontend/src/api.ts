@@ -360,6 +360,7 @@ export function sendChat(
     onTaskCreated?: (taskId: string, sessionId?: string) => void;
     onMemoryCtx?: (count: number) => void;
     onMemorySaved?: (content: string, kind?: string) => void;
+    onMemorySearch?: (items: { id: string; kind: string; content: string }[], keyword: string) => void;
   },
 ): () => void {
   const ctrl = new AbortController();
@@ -394,7 +395,7 @@ export function sendChat(
             else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
           }
           if (!dataStr) continue;
-          const data = JSON.parse(dataStr) as { text?: string; sessionId?: string; taskId?: string; count?: number; content?: string; kind?: string };
+          const data = JSON.parse(dataStr) as { text?: string; sessionId?: string; taskId?: string; count?: number; content?: string; kind?: string; items?: { id: string; kind: string; content: string }[]; keyword?: string };
           if (eventType === "task_created" && data.taskId) {
             if (data.sessionId) returnSessionId = data.sessionId;
             taskIdRef = data.taskId;
@@ -403,6 +404,8 @@ export function sendChat(
             opts?.onMemoryCtx?.(data.count);
           } else if (eventType === "memory_saved" && data.content) {
             opts?.onMemorySaved?.(data.content, data.kind);
+          } else if (eventType === "memory_search" && data.items) {
+            opts?.onMemorySearch?.(data.items, data.keyword ?? "");
           } else if (eventType === "token" && data.text) {
             full += data.text;
             onToken(data.text);

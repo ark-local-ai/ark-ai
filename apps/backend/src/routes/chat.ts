@@ -10,6 +10,7 @@ import { pickChannel, recordSuccess, recordFailure } from "../models/router";
 import { chatStream, type ChatMessage } from "../models/client";
 import {
   createChatSession, appendChatMessage, searchChatMessages, createMemory, searchMemoriesFor,
+  listMemories, searchMemories,
 } from "../db/store";
 import { enqueueTask } from "./../agent/runner.js";
 import { currentUser } from "./auth";
@@ -36,6 +37,33 @@ export function parseRemember(message: string): { content: string; kind?: string
   }
   if (!rest) return null;
   return { content: rest, kind };
+}
+
+/**
+ * M55：`/记忆 [关键词]` 命令——主动检索/召唤记忆。
+ * 给了关键词 → 检索；留空 → 列最近几条。返回解析结果，非命令返回 null。
+ */
+export function parseMemRecall(message: string): { keyword: string } | null {
+  const m = message.trim();
+  if (!m.startsWith("/记忆")) return null;
+  const keyword = m.slice("/记忆".length).trim();
+  return { keyword };
+}
+
+/**
+ * M55：显式「引用记忆」标记——用户在前端点选记忆芯片后，会把
+ * `📌 引用记忆：<内容>` 插进消息。这里抽取出被引用的记忆内容（去重），供注入上下文。
+ */
+export function extractMemRefs(message: string): string[] {
+  const out: string[] = [];
+  for (const line of (message ?? "").split("\n")) {
+    const m = line.trim().match(/^📌\s*引用记忆[:：]\s*(.+)$/);
+    if (m && m[1].trim()) {
+      const c = m[1].trim();
+      if (!out.includes(c)) out.push(c);
+    }
+  }
+  return out;
 }
 
 /**
@@ -100,11 +128,39 @@ export async function chatRoutes(app: FastifyInstance) {
       return;
     }
 
-    // M42：把与当前消息相关的记忆检索进上下文（系统提示注入），并告知前端注入了几条
-    const memHits = userId ? searchMemoriesFor(message, userId) : [];
-    const memList = memHits.slice(0, 6).map((m) => (m.kind ? `[${m.kind}]` : "") + m.content);
+    // M55：`/记忆 [关键词]` 命令——主动检索/召唤记忆，结果以 memory_search 事件回给前端点选芯片
+    const recall = parseMemRecall(message);
+    if (recall) {
+      reply.raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      const send = (type: string, data: unknown) => {
+        reply.raw.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+      let items: { id: string; kind: string; content: string }[] = [];
+      if (recall.keyword) {
+        // 关键词检索：FTS 子串优先，空结果再用高召回 LIKE
+        items = searchMemories(recall.keyword, userId).map((m) => ({ id: m.id, kind: m.kind, content: m.content }));
+        if (!items.length) {
+          items = searchMemoriesFor(recall.keyword, userId).map((m) => ({ id: m.id, kind: m.kind, content: m.content }));
+        }
+      } else {
+        // 留空 → 列最近几条
+        items = listMemories(userId).slice(0, 8).map((m) => ({ id: m.id, kind: m.kind, content: m.content }));
+      }
+      const text = items.length
+        ? `找到 ${items.length} 条记忆，可点选引用进下一条消息：`
+        : `没有找到相关记忆。试试：/记忆 <关键词>（或 /记得 [偏好|事实|笔记] 内容 先存一条）。`;
+      appendChatMessage(sessionId, "assistant", text);
+      send("memory_search", { items, keyword: recall.keyword });
+      send("done", { text, sessionId });
+      return;
+    }
 
-    // SSE 头
+    // SSE 头（主路径：普通消息 / 引用记忆 / 被动注入）
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -114,7 +170,20 @@ export async function chatRoutes(app: FastifyInstance) {
     const send = (type: string, data: unknown) => {
       reply.raw.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-    if (memList.length) send("memory_ctx", { count: memList.length });
+
+    // M55：显式「引用记忆」——用户点选记忆芯片后夹带 `📌 引用记忆：<内容>`，抽出来注入上下文
+    const memRefs = extractMemRefs(message);
+    const memList = memRefs.length
+      ? memRefs
+      : (userId ? searchMemoriesFor(message, userId) : []).slice(0, 6).map((m) => (m.kind ? `[${m.kind}]` : "") + m.content);
+
+    // M42：把与当前消息相关的记忆检索进上下文（系统提示注入），并告知前端注入了几条
+    if (memRefs.length) {
+      // 用户显式引用的记忆单独事件，前端据此显示「已引用 N 条记忆」
+      send("mem_ref", { count: memRefs.length });
+    } else if (memList.length) {
+      send("memory_ctx", { count: memList.length });
+    }
 
     // 带记忆的模型消息：把相关记忆作为系统上下文注入（若无命中则原样用 history）
     const modelMessages: ChatMessage[] = memList.length
