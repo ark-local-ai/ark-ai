@@ -9,8 +9,8 @@
 // 三者相对独立——一个失败不影响后续 Agent 继续尝试（鲁棒）。
 
 import { chatWithFailover } from "../models/router";
-import { defaultTool, type ToolInput } from "../tools/registry";
 import { gatherContext, appendRefSection, type PipelineContext, type AttachmentRef } from "../tools/context";
+import { draftSections } from "../tools/draft";
 import type { StepContent } from "./../tools/office";
 
 const TIMEOUT_MS = 20000;
@@ -104,13 +104,9 @@ async function writer(
   }
 }
 
-/** 写手的确定性降级：复用 defaultTool 脚本 */
+/** 写手的确定性降级：M65 走场景化草稿生成（有开头/分节/结论的真内容，不再是复读计划清单） */
 function scripted(prompt: string, plan: string[], kind: "ppt" | "xls" | "doc"): StepContent[] {
-  return plan.map((title) => {
-    const input: ToolInput = { prompt, plan, step: title, kind };
-    const r = defaultTool.run(input);
-    return { title: r.title, paragraphs: r.body };
-  });
+  return draftSections(prompt, plan, kind);
 }
 
 // ---------------- 校验：对照需求校验并收尾 ----------------
