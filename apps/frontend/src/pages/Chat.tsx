@@ -34,6 +34,8 @@ export default function Chat() {
   const [memFlash, setMemFlash] = useState<string | null>(null);
   // M55：/记忆 检索结果芯片（点击引用进输入框）
   const [memResults, setMemResults] = useState<{ id: string; kind: string; content: string }[]>([]);
+  // M62：/档案 —— 聚合偏好/事实记忆，渲染成带来源回链的用户档案列表
+  const [profileItems, setProfileItems] = useState<{ id: string; kind: string; content: string; source?: string | null; expired?: boolean }[]>([]);
   const [memKeyword, setMemKeyword] = useState("");
   // M58：离开会话时的「记忆沉淀」确认面板
   const [distill, setDistill] = useState<{ candidates: DistillCandidate[]; viaLLM: boolean; error?: string } | null>(null);
@@ -185,6 +187,12 @@ export default function Chat() {
           setMemKeyword(keyword);
           if (memFlash) setMemFlash(null);
         },
+        onMemoryProfile: (items) => {
+          // /档案 指令：把偏好/事实记忆渲染成档案列表（带来源回链与过期标注）
+          setProfileItems(items);
+          setMemResults([]);
+          if (memFlash) setMemFlash(null);
+        },
         onMemorySaved: (content) => {
           // /记得 已存，替换助理气泡为确认文案
           setMsgs((m) => {
@@ -308,6 +316,30 @@ export default function Chat() {
               </div>
             ))}
           </div>
+          {profileItems.length > 0 && (
+            <div className="mem-profile" style={{ maxWidth: 760, margin: "0 auto 10px", border: "1px solid var(--line)", borderRadius: 10, padding: "12px 14px", background: "var(--surface)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <b style={{ fontSize: 13, color: "var(--brand)" }}>你的档案</b>
+                <span style={{ fontSize: 11, color: "var(--text-3)" }}>{profileItems.length} 条偏好/事实 · 点击来源可回看原对话</span>
+                <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setProfileItems([])}>收起</button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {profileItems.map((m) => {
+                  const sid = m.source?.startsWith("chat") ? m.source.replace(/^chat-?distill:/, "").replace(/^chat:/, "") : null;
+                  return (
+                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+                      <span className={`pill ${m.kind}${m.expired ? " off" : ""}`} style={{ flexShrink: 0 }}>{m.kind === "preference" ? "偏好" : "事实"}{m.expired ? " · 过期" : ""}</span>
+                      <span style={{ flex: 1, color: m.expired ? "var(--text-3)" : "var(--text-1)" }}>{m.content}</span>
+                      {m.source === "manual" && <span style={{ fontSize: 10.5, color: "var(--text-3)", flexShrink: 0 }}>手动</span>}
+                      {sid && (
+                        <button className="link-btn" style={{ flexShrink: 0 }} onClick={() => nav(`/app/chat?sess=${sid}`)}>回看来源</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {memResults.length > 0 && (
             <div className="mem-results" style={{ maxWidth: 760, margin: "0 auto 10px", border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", background: "var(--brand-soft)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>

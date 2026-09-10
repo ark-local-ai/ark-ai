@@ -361,6 +361,7 @@ export function sendChat(
     onMemoryCtx?: (count: number) => void;
     onMemorySaved?: (content: string, kind?: string) => void;
     onMemorySearch?: (items: { id: string; kind: string; content: string }[], keyword: string) => void;
+    onMemoryProfile?: (items: { id: string; kind: string; content: string; source?: string | null; expiredAt?: number | null; expired?: boolean }[]) => void;
   },
 ): () => void {
   const ctrl = new AbortController();
@@ -406,6 +407,8 @@ export function sendChat(
             opts?.onMemorySaved?.(data.content, data.kind);
           } else if (eventType === "memory_search" && data.items) {
             opts?.onMemorySearch?.(data.items, data.keyword ?? "");
+          } else if (eventType === "memory_profile" && data.items) {
+            opts?.onMemoryProfile?.(data.items as { id: string; kind: string; content: string; source?: string | null; expiredAt?: number | null; expired?: boolean }[]);
           } else if (eventType === "token" && data.text) {
             full += data.text;
             onToken(data.text);

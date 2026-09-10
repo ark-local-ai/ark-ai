@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { looksLikeTask, parseRemember, parseMemRecall, extractMemRefs } from "./chat";
+import { looksLikeTask, parseRemember, parseMemRecall, extractMemRefs, parseProfile, buildProfileItems } from "./chat";
 
 describe("对话式任务意图检测（M40 looksLikeTask）", () => {
   it("命中「动作 + 产出物」视为任务请求", () => {
@@ -66,5 +66,27 @@ describe("引用记忆标记（M55 extractMemRefs）", () => {
   it("无标记返回空数组", () => {
     expect(extractMemRefs("普通消息")).toEqual([]);
     expect(extractMemRefs("")).toEqual([]);
+  });
+});
+
+describe("用户档案命令（M62 parseProfile / buildProfileItems）", () => {
+  it("`/档案`（含变体）识别为档案命令，普通消息不是", () => {
+    expect(parseProfile("/档案")).toBe(true);
+    expect(parseProfile("/档案 ")).toBe(true);
+    expect(parseProfile("/档案 我想看看")).toBe(true);
+    expect(parseProfile("我的档案")).toBe(false);
+    expect(parseProfile("你好")).toBe(false);
+    expect(parseProfile("/记得 偏好")).toBe(false);
+  });
+
+  it("buildProfileItems 标注过期并透出来源", () => {
+    const items = buildProfileItems([
+      { id: "a", kind: "preference", content: "喜欢暖色", source: "chat:abc", created: "", expires_at: Date.now() + 60000 },
+      { id: "b", kind: "fact", content: "团队五人", source: "chat-distill:xyz", created: "", expires_at: Date.now() - 1000 },
+    ]);
+    expect(items[0].expired).toBe(false);
+    expect(items[0].source).toBe("chat:abc");
+    expect(items[1].expired).toBe(true);
+    expect(items[1].source).toBe("chat-distill:xyz");
   });
 });

@@ -50,6 +50,24 @@ export function parseMemRecall(message: string): { keyword: string } | null {
   return { keyword };
 }
 
+/** M62：`/档案` 命令——对话内聚合所有偏好/事实记忆成一份「用户档案」。返回 true 表示是档案命令。 */
+export function parseProfile(message: string): boolean {
+  const m = message.trim();
+  return m === "/档案" || m === "/档案 " || m.startsWith("/档案 ");
+}
+
+/** M62：从记忆里提炼「档案条」（偏好/事实），标注是否过期，来源可回链。 */
+export function buildProfileItems(memories: import("../db/store").MemoryRow[]) {
+  return memories.map((m) => ({
+    id: m.id,
+    kind: m.kind,
+    content: m.content,
+    source: m.source ?? null,
+    expiredAt: m.expires_at ?? null,
+    expired: !!m.expires_at && m.expires_at <= Date.now(),
+  }));
+}
+
 /**
  * M55：显式「引用记忆」标记——用户在前端点选记忆芯片后，会把
  * `📌 引用记忆：<内容>` 插进消息。这里抽取出被引用的记忆内容（去重），供注入上下文。
@@ -160,6 +178,33 @@ export async function chatRoutes(app: FastifyInstance) {
         : `没有找到相关记忆。试试：/记忆 <关键词>（或 /记得 [偏好|事实|笔记] 内容 先存一条）。`;
       appendChatMessage(sessionId, "assistant", text);
       send("memory_search", { items, keyword: recall.keyword });
+      send("done", { text, sessionId });
+      return;
+    }
+
+    // M62：`/档案` 命令——聚合该用户所有偏好/事实记忆成「用户档案」，SSE 回 memory_profile + 文本摘要
+    if (parseProfile(message)) {
+      reply.raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      const send = (type: string, data: unknown) => {
+        reply.raw.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+      // 偏好/事实是「用户是什么样的人」，笔记更像临时摘录，档案聚焦前两类（未过期+过期都列出并标注）
+      // userId 可为 undefined（软门禁/未登录）：listMemories(undefined) 会列全局记忆，同样能聚合。
+      const all = listMemories(userId as string | undefined);
+      const prefs = all.filter((m) => m.kind === "preference" || m.kind === "fact");
+      const items = buildProfileItems(prefs);
+      const active = items.filter((it) => !it.expired);
+      const text = items.length
+        ? `你的档案（${active.length} 条有效，${items.length - active.length} 条已过期）：\n` +
+          items.map((it, i) => `${i + 1}. [${it.kind === "preference" ? "偏好" : "事实"}]${it.expired ? "（已过期）" : ""} ${it.content}`).join("\n")
+        : `还没有偏好/事实记忆。用 /记得 [偏好|事实] 内容 让我记住你，或直接聊天我来提炼。`;
+      appendChatMessage(sessionId, "assistant", text);
+      send("memory_profile", { items });
       send("done", { text, sessionId });
       return;
     }
