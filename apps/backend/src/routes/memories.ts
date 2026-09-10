@@ -1,7 +1,7 @@
 // ===== 记忆 API（M41）=====
 // GET    /api/memories           列表（可 ?kind= 过滤，多用户隔离）
 // GET    /api/memories/search?q=  记忆全文检索（FTS5 trigram）
-// POST   /api/memories           创建（{kind?, content, tags?}）
+// POST   /api/memories           创建（{kind?, content, tags?, source?, expiresAtMs?}）
 // GET    /api/memories/:id       单条
 // PUT    /api/memories/:id       编辑
 // DELETE /api/memories/:id       删除
@@ -10,7 +10,7 @@ import type { FastifyInstance } from "fastify";
 import { currentUser } from "./auth";
 import {
   createMemory, listMemories, getMemory, updateMemory, deleteMemory, searchMemories,
-  deleteMemories, findDuplicateMemories, mergeMemories,
+  deleteMemories, findDuplicateMemories, mergeMemories, setMemoryExpiry,
 } from "../db/store";
 
 export async function memoryRoutes(app: FastifyInstance) {
@@ -35,15 +35,27 @@ export async function memoryRoutes(app: FastifyInstance) {
     return reply.send(m);
   });
 
-  app.post<{ Body: { kind?: string; content?: string; tags?: string; source?: string } }>("/", async (req, reply) => {
+  app.post<{ Body: { kind?: string; content?: string; tags?: string; source?: string; expiresAtMs?: number | null } }>("/", async (req, reply) => {
     const content = (req.body?.content ?? "").trim();
     if (!content) return reply.code(400).send({ error: "记忆内容必填" });
     const id = createMemory(
-      { kind: req.body?.kind, content, tags: req.body?.tags, source: req.body?.source ?? "manual" },
+      {
+        kind: req.body?.kind, content, tags: req.body?.tags, source: req.body?.source ?? "manual",
+        expiresAtMs: req.body?.expiresAtMs ?? null,
+      },
       currentUser(req)?.id,
     );
     return reply.code(201).send({ id });
   });
+
+  // M61：设置/清除记忆过期时间（expiresAtMs 为 null 表示改为长期有效）。须在 /:id 之前。
+  app.post<{ Params: { id: string }; Body: { expiresAtMs?: number | null } }>(
+    "/:id/expiry", async (req, reply) => {
+      const ok = setMemoryExpiry(req.params.id, req.body?.expiresAtMs ?? null, currentUser(req)?.id);
+      if (!ok) return reply.code(404).send({ error: "记忆不存在或不可见" });
+      return reply.send({ ok: true });
+    },
+  );
 
   app.put<{ Params: { id: string }; Body: { kind?: string; content?: string; tags?: string } }>(
     "/:id", async (req, reply) => {

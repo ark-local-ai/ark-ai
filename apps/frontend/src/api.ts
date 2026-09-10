@@ -954,6 +954,8 @@ export interface MemoryDto {
   created: string;
   /** M60 来源溯源：手动=manual；"chat:<sid>"（/记得）；"chat-distill:<sid>"（M58 提炼） */
   source?: string | null;
+  /** M61 过期时间（epoch ms，可空）；到达后不再自动注入，列表仍可见 */
+  expires_at?: number | null;
 }
 
 export async function listMemories(kind?: string): Promise<MemoryDto[]> {
@@ -969,7 +971,7 @@ export async function searchMemories(q: string): Promise<MemoryDto[]> {
   return res.json();
 }
 
-export async function createMemory(body: { kind?: string; content: string; tags?: string; source?: string }): Promise<{ id: string }> {
+export async function createMemory(body: { kind?: string; content: string; tags?: string; source?: string; expiresAtMs?: number | null }): Promise<{ id: string }> {
   const res = await fetch(`${BASE}/api/memories`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -986,6 +988,16 @@ export async function updateMemory(id: string, body: { kind?: string; content?: 
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`编辑记忆失败: ${res.status}`);
+}
+
+// M61：设置/清除记忆时效（expiresAtMs 传 null 表示改为长期有效）
+export async function setMemoryExpiry(id: string, expiresAtMs: number | null): Promise<void> {
+  const res = await fetch(`${BASE}/api/memories/${id}/expiry`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ expiresAtMs }),
+  });
+  if (!res.ok) throw new Error(`设置记忆时效失败: ${res.status}`);
 }
 
 export async function deleteMemory(id: string): Promise<void> {

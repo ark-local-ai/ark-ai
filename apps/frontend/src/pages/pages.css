@@ -319,6 +319,12 @@
 .link-btn { border: none; background: none; cursor: pointer; font-size: 11px; color: var(--brand); display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 6px; }
 .link-btn:hover { background: var(--brand-soft); color: var(--brand); }
 
+/* M61 记忆时效——过期/临近的温和提示（禁蓝：用暖红/暖灰，不用冷蓝） */
+.expiry-pill { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); border: 1px solid transparent; }
+.expiry-pill.soon { background: #fdeee3; color: #b36a2a; }
+.expiry-pill.off { background: #f8e5e3; color: #b34a3a; }
+
+
 /* 记忆注入提示（M42） */
 .mem-flash { background: var(--brand-soft); color: var(--brand); border: 1px solid var(--brand); font-size: 11.5px; animation: memIn 0.25s ease; }
 @keyframes memIn { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }

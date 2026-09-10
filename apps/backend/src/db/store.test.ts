@@ -458,6 +458,37 @@ describe("记忆来源溯源（M60 store）", () => {
   });
 });
 
+describe("记忆时效（M61 store）", () => {
+  it("expires_at 落库透出；自动注入(searchMemoriesFor)过滤过期、list/get 仍可见", () => {
+    const fresh = store.createMemory({ kind: "preference", content: "偏好暖茶褐界面", source: "manual" }, "u1");
+    const stale = store.createMemory(
+      { kind: "note", content: "偏好暖茶褐界面 过期版", source: "manual", expiresAtMs: Date.now() - 1000 },
+      "u1",
+    );
+    // list/get 透出过期时间（管理仍可见）
+    expect(store.getMemory(stale)!.expires_at).toBeLessThan(Date.now());
+    expect(store.listMemories("u1").some((m) => m.id === stale)).toBe(true);
+    // 自动注入路径过滤掉过期记忆
+    const inj = store.searchMemoriesFor("偏好暖茶褐界面", "u1");
+    expect(inj.some((m) => m.id === fresh)).toBe(true);
+    expect(inj.some((m) => m.id === stale)).toBe(false);
+  });
+
+  it("setMemoryExpiry 设/清过期；不存在或越权返回 false", () => {
+    const id = store.createMemory({ kind: "note", content: "可设时效" }, "u1");
+    // 设过期
+    expect(store.setMemoryExpiry(id, Date.now() + 60000, "u1")).toBe(true);
+    expect(store.getMemory(id)!.expires_at).toBeGreaterThan(Date.now());
+    // 清过期（长期有效）
+    expect(store.setMemoryExpiry(id, null, "u1")).toBe(true);
+    expect(store.getMemory(id)!.expires_at).toBeNull();
+    // 不存在 / 不可见
+    expect(store.setMemoryExpiry("nope", 1, "u1")).toBe(false);
+    const other = store.createMemory({ kind: "note", content: "他人记忆" }, "u2");
+    expect(store.setMemoryExpiry(other, 1, "u1")).toBe(false);
+  });
+});
+
 describe("记忆批量整理（M57 store）", () => {
   beforeEach(() => {
     resetTables();

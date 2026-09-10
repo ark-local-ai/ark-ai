@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { IconSearch, IconPlus, IconTrash, IconNote, IconCheck, IconX, IconBubble, IconLink } from "../components/icons";
 import {
   listMemories, searchMemories, createMemory, updateMemory, deleteMemory,
-  batchDeleteMemories, findDuplicateMemories, mergeMemories,
+  batchDeleteMemories, findDuplicateMemories, mergeMemories, setMemoryExpiry,
   type MemoryDto, type DuplicateGroupDto,
 } from "../api";
 
@@ -145,6 +145,25 @@ export default function Memories() {
     return <span className="source-tag">{m.source}</span>;
   };
 
+  // M61：记忆时效判断与处理——已过期/即将过期的标注，卡片提供「延期 30 天」与「改为长期」。
+  const isExpired = (m: MemoryDto) => !!m.expires_at && m.expires_at <= Date.now();
+  const renew = async (m: MemoryDto, days: number) => {
+    try { await setMemoryExpiry(m.id, Date.now() + days * 86400000); load(); } catch { /* 忽略 */ }
+  };
+  const unexpire = async (m: MemoryDto) => {
+    try { await setMemoryExpiry(m.id, null); load(); } catch { /* 忽略 */ }
+  };
+  const renderExpiry = (m: MemoryDto) => {
+    if (!m.expires_at) return null;
+    const expired = isExpired(m);
+    const left = Math.ceil((m.expires_at - Date.now()) / 86400000);
+    return (
+      <span className={`expiry-pill${expired ? " off" : left <= 7 ? " soon" : ""}`}>
+        {expired ? "已过期" : `${left} 天后过期`}
+      </span>
+    );
+  };
+
   return (
     <div className="page">
       <div className="page-h1">记忆</div>
@@ -269,7 +288,16 @@ export default function Memories() {
             </div>
             <div className="mem-content">{m.content}</div>
             {m.tags && <div className="mem-tags">{m.tags.split(",").map((t, i) => <span key={i} className="pill ghost">#{t.trim()}</span>)}</div>}
-            <div className="mem-src">{renderSource(m)}</div>
+            <div className="mem-src">
+              {renderSource(m)}
+              {renderExpiry(m)}
+              {m.expires_at && (
+                <span style={{ display: "inline-flex", gap: 6 }}>
+                  <button className="link-btn" onClick={() => renew(m, 30)}>{isExpired(m) ? "续期 30 天" : "延长 30 天"}</button>
+                  <button className="link-btn" onClick={() => unexpire(m)}>改为长期</button>
+                </span>
+              )}
+            </div>
             <button className="btn soft sm" style={{ marginTop: 10, alignSelf: "flex-start" }} onClick={() => openEdit(m)}>编辑</button>
           </div>
         ))}

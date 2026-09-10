@@ -544,3 +544,26 @@ describe("记忆来源溯源 API（M60）", () => {
     expect(store.getMemory(savedId)!.source).toBe(`chat-distill:${sid}`);
   });
 });
+
+describe("记忆时效 API（M61）", () => {
+  it("POST /api/memories 支持 expiresAtMs；POST /:id/expiry 设/清时效；越权 404", async () => {
+    const withExp = await post("/api/memories", { kind: "note", content: "带时效", expiresAtMs: Date.now() + 60000 });
+    expect(withExp.statusCode).toBe(201);
+    expect(store.getMemory(withExp.json().id)!.expires_at).toBeGreaterThan(Date.now());
+
+    const noExp = await post("/api/memories", { kind: "note", content: "不带时效" });
+    expect(store.getMemory(noExp.json().id)!.expires_at).toBeNull();
+
+    // 设时效
+    const set = await post(`/api/memories/${noExp.json().id}/expiry`, { expiresAtMs: Date.now() + 3600000 });
+    expect(set.statusCode).toBe(200);
+    expect(store.getMemory(noExp.json().id)!.expires_at).toBeGreaterThan(Date.now());
+    // 清时效（长期有效）
+    const clear = await post(`/api/memories/${noExp.json().id}/expiry`, { expiresAtMs: null });
+    expect(clear.statusCode).toBe(200);
+    expect(store.getMemory(noExp.json().id)!.expires_at).toBeNull();
+    // 不存在 → 404
+    const missing = await post("/api/memories/nope/expiry", { expiresAtMs: 1 });
+    expect(missing.statusCode).toBe(404);
+  });
+});

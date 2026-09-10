@@ -382,6 +382,13 @@ if (!memCols.some((c) => c.name === "source")) {
   db.exec(`ALTER TABLE memories ADD COLUMN source TEXT`);
 }
 
+// ---- 迁移：记忆时效（memories.expires_at，M61）----
+// expires_at 存储过期时间（epoch ms，可空）：到达后该记忆视为失效，不再被自动注入进对话，
+// 但保留在列表（前端标注「已过期」供延期或删除）。null=长期有效（永不自动过期）。
+if (!memCols.some((c) => c.name === "expires_at")) {
+  db.exec(`ALTER TABLE memories ADD COLUMN expires_at INTEGER`);
+}
+
 export interface ChatSessionRow {
   id: string; title: string; created: string; updated: string;
 }
@@ -924,6 +931,8 @@ export interface MemoryRow {
   created: string;
   /** M60 来源溯源：null=手动/未知；"chat:<sid>"（/记得）、"chat-distill:<sid>"（M58 提炼） */
   source?: string | null;
+  /** M61 过期时间（epoch ms，可空）；到达后不再自动注入，保留列表供延期/删除 */
+  expires_at?: number | null;
 }
 
 function syncMemoryFts(id: string, content: string, userId: string | null | undefined): void {
@@ -935,20 +944,21 @@ function syncMemoryFts(id: string, content: string, userId: string | null | unde
   }
 }
 
-/** 创建一条记忆；kind 可为 note/preference/fact 等，tags 逗号分隔，source 可选溯源。返回 id */
+/** 创建一条记忆；kind 可为 note/preference/fact 等，tags 逗号分隔，source 可选溯源，expiresAtMS 可选过期。返回 id */
 export function createMemory(
-  m: { kind?: string; content: string; tags?: string; source?: string },
+  m: { kind?: string; content: string; tags?: string; source?: string; expiresAtMs?: number | null },
   userId?: string,
 ): string {
   const id = Math.random().toString(36).slice(2, 10);
   const kind = m.kind || "note";
   db.prepare(
-    `INSERT INTO memories (id, kind, content, tags, user_id, created, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO memories (id, kind, content, tags, user_id, created, source, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id, kind, m.content, m.tags ? m.tags : null, userId ?? null,
     new Date().toLocaleString("zh-CN", { hour12: false }),
     m.source ? m.source : null,
+    m.expiresAtMs ?? null,
   );
   syncMemoryFts(id, m.content, userId);
   return id;
@@ -963,14 +973,14 @@ export function listMemories(userId?: string, kind?: string): MemoryRow[] {
     params.push(kind);
   }
   return db.prepare(
-    `SELECT id, kind, content, tags, created, source FROM memories WHERE ${where.join(" AND ")}
+    `SELECT id, kind, content, tags, created, source, expires_at FROM memories WHERE ${where.join(" AND ")}
      ORDER BY created DESC`,
   ).all(...params) as unknown as MemoryRow[];
 }
 
 export function getMemory(id: string): MemoryRow | null {
   const r = db.prepare(
-    `SELECT id, kind, content, tags, created, source FROM memories WHERE id = ?`,
+    `SELECT id, kind, content, tags, created, source, expires_at FROM memories WHERE id = ?`,
   ).get(id) as unknown as MemoryRow | undefined;
   return r ?? null;
 }
@@ -1085,7 +1095,7 @@ export function searchMemories(q: string, userId?: string): MemoryRow[] {
   const term = (q ?? "").trim();
   if (!term) return [];
   return db.prepare(
-    `SELECT m.id, m.kind, m.content, m.tags, m.created, m.source
+    `SELECT m.id, m.kind, m.content, m.tags, m.created, m.source, m.expires_at
      FROM memories_fts
      JOIN memories m ON m.id = memories_fts.id
      WHERE memories_fts MATCH ? AND (memories_fts.user_id = ? OR memories_fts.user_id IS NULL)
@@ -1112,13 +1122,28 @@ export function searchMemoriesFor(message: string, userId?: string): MemoryRow[]
   const unique = [...new Set(grams)];
   if (!unique.length) return [];
   const like = unique.map((g) => `content LIKE '%'||?||'%'`).join(" OR ");
-  const params: (string | null)[] = [userId ?? null, ...unique];
+  const params: (string | null | number)[] = [userId ?? null, ...unique];
+  // M61：自动注入只取「未过期」的记忆（expires_at IS NULL 或尚未到期）；管理/召回路径仍可见过期项
   return db.prepare(
-    `SELECT id, kind, content, tags, created, source
+    `SELECT id, kind, content, tags, created, source, expires_at
      FROM memories
      WHERE (user_id = ? OR user_id IS NULL) AND (${like})
+       AND (expires_at IS NULL OR expires_at > ?)
      ORDER BY created DESC LIMIT 10`,
-  ).all(...params) as unknown as MemoryRow[];
+  ).all(...params, Date.now()) as unknown as MemoryRow[];
+}
+
+/**
+ * M61 设置/清除一条记忆的过期时间（epoch ms；传 null 表示设为长期有效——清除过期）。
+ * 多用户隔离：只能操作当前用户可见的记忆；不存在或不可见返回 false。
+ */
+export function setMemoryExpiry(id: string, expiresAtMs: number | null, userId?: string | null): boolean {
+  const vis = db.prepare(
+    `SELECT 1 FROM memories WHERE id = ? AND (user_id = ? OR user_id IS NULL)`,
+  ).get(id, userId?.toString() ?? null);
+  if (!vis) return false;
+  db.prepare(`UPDATE memories SET expires_at = ? WHERE id = ?`).run(expiresAtMs, id);
+  return true;
 }
 
 // ---- 通用 key-value 设置（M45 IM 桥等用） ----
